@@ -1,3 +1,6 @@
+import { NotificationBell } from "./NotificationBell";
+import { ChatButton } from "../features/chat/ChatButton";
+import { AskZenin } from "../features/ai/AskZenin";
 import {
   ActionIcon,
   Anchor,
@@ -97,6 +100,9 @@ export default function Header({ mobileOpened, toggleMobile }: { mobileOpened: b
             <IconSearch size={18} />
           </ActionIcon>
         </Tooltip>
+        <AskZenin />
+        <ChatButton />
+        <NotificationBell />
         <JobsIndicator />
         <ColorSchemeToggle />
         <UserMenu />

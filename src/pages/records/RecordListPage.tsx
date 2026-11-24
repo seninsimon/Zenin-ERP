@@ -1,21 +1,41 @@
 import { useMemo, useState } from "react";
-import { ActionIcon, Alert, Anchor, Badge, Button, Group, Menu, Skeleton, Text, Tooltip } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  Anchor,
+  Badge,
+  Box,
+  Button,
+  Group,
+  Menu,
+  SegmentedControl,
+  Select,
+  Skeleton,
+  Stack,
+  Text,
+  TextInput,
+  Tooltip,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  IconCalendarMonth,
   IconChevronDown,
   IconDots,
   IconDownload,
   IconEye,
   IconFilterOff,
+  IconLayoutKanban,
   IconLock,
   IconPencil,
   IconPlus,
+  IconSearch,
   IconTable,
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import type { Icon } from "@tabler/icons-react";
 
 import { errorMessage, getDepartmentOptions, getRelationOptions, getUserOptions, startExport, type Job } from "../../api/api";
 import { useDeleteRecord, useWatchJob } from "../../api/reactQueryHooks/useRecords";
@@ -36,25 +56,43 @@ import { confirmDanger } from "../../components/ui/confirm";
 import { editRecordPath, newRecordPath, recordPath, tableTitle } from "../../layout/nav";
 import { formatDateTime, formatNumber, pluralize } from "../../lib/format";
 import { readJson } from "../../lib/storage";
+import { BoardView } from "../../features/records/BoardView";
+import { CalendarView } from "../../features/records/CalendarView";
+import { BulkUpdateModal } from "../../features/records/BulkUpdateModal";
 import { ImportCsvModal } from "../../features/records/ImportCsvModal";
 import { NoTableAccess } from "../../features/records/states";
 import {
+  bulkFields,
   columnLabel,
   FILE_TYPES,
   httpStatus,
   primaryColumn,
-  SORTABLE_TYPES,
+  isSortable,
+  valueType,
   type RecordColumn,
   type RecordRow,
   type TableSchemaInfo,
 } from "../../features/records/schema";
+import { useAppCrumb } from "../../features/apps/appMenu";
+import { LiveChangeBar } from "../../features/live/LiveChangeBar";
+import { useLiveChanges } from "../../features/live/live";
+
+// an icon and a word, the word hidden on phones
+const ViewLabel = ({ icon: I, text }: { icon: Icon; text: string }) => (
+  <Group gap={6} wrap="nowrap">
+    <I size={16} stroke={1.75} />
+    <Text span size="sm" visibleFrom="sm">
+      {text}
+    </Text>
+  </Group>
+);
 
 const filterKind = (column: RecordColumn): FilterField["kind"] => {
-  if (column.type === "number" || column.type === "date" || column.type === "boolean" || column.type === "relation") {
-    return column.type;
-  }
+  const type = valueType(column); // a formula filters like its result
+  if (type === "number" || type === "date" || type === "boolean" || type === "relation") return type;
   // people and departments are picked like linked records
   if (column.type === "user" || column.type === "department") return "relation";
+  if (column.type === "choice") return "choice";
   return FILE_TYPES.includes(column.type) ? "file" : "text";
 };
 
@@ -78,6 +116,10 @@ const loadPeople = (search: string) =>
 
 export default function RecordListPage() {
   const { table = "" } = useParams();
+  // "Hana changed this list · Refresh" (changes by others since it was loaded)
+  const [liveSince, setLiveSince] = useState(() => Date.now());
+  const liveChanges = useLiveChanges(table, liveSince);
+  const appCrumb = useAppCrumb(); // "HR & leave" when inside an app
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { isAdmin } = useCurrentUser();
@@ -89,6 +131,26 @@ export default function RecordListPage() {
   const perms = schema?.permissions ?? {};
 
   const [url, setUrl] = useTableUrlState<Filter>();
+
+  // Table, Board (by a choice column) or Calendar (by a date column), kept in the address
+  const [params, setParams] = useSearchParams();
+  const boardColumns = (schema?.columns ?? []).filter((c) => c.type === "choice" && !c.multiple);
+  const dateColumns = (schema?.columns ?? []).filter((c) => c.type === "date");
+  const requested = params.get("view");
+  const view: "table" | "board" | "calendar" =
+    requested === "board" && boardColumns.length ? "board" : requested === "calendar" && dateColumns.length ? "calendar" : "table";
+  const groupBy = boardColumns.find((c) => c.name === params.get("by")) ?? boardColumns[0];
+  const dateColumn = dateColumns.find((c) => c.name === params.get("on")) ?? dateColumns[0];
+  const setViewParam = (key: string, value: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true }
+    );
   const [defaultPageSize] = useState(() => readJson(`erp:table:${storageKey}`, { pageSize: 25 }).pageSize);
   const pageSize = url.pageSize ?? defaultPageSize;
 
@@ -106,6 +168,8 @@ export default function RecordListPage() {
   const deleteOne = useDeleteRecord(table);
   const bulkDelete = useBulkDelete(table);
   const [importOpen, setImportOpen] = useState(false);
+  // the selected rows being updated together (bulk update)
+  const [bulkEdit, setBulkEdit] = useState<{ ids: string[]; clear: () => void } | null>(null);
 
   /* ---------- background jobs (import / export) ---------- */
   const jobsLink = (
@@ -146,12 +210,13 @@ export default function RecordListPage() {
   };
 
   /* ---------- columns & filters ---------- */
-  // "Visible to": only when the table is shared with several departments and
-  // you can see more than one; admins also while some records are admins-only
+  // "Visible to": when the table is shared with several departments (a record
+  // may be visible to several); admins also while some records are admins-only
   const showDepartment =
     Boolean(schema) &&
-    (((schema?.departments?.length ?? 0) > 1 && (isAdmin || (schema?.allowedDepartments?.length ?? 0) > 1)) ||
-      (isAdmin && (schema?.unassignedCount ?? 0) > 0));
+    schema?.byDepartment !== false &&
+    ((schema?.departments?.length ?? 0) > 1 || (isAdmin && (schema?.unassignedCount ?? 0) > 0));
+  const departmentNameById = useMemo(() => new Map((schema?.departments ?? []).map((d) => [d._id, d.name])), [schema]);
   const sharedWithNobody = Boolean(schema) && isAdmin && (schema?.departments?.length ?? 0) === 0;
 
   const columns = useMemo<DataTableColumn<RecordRow>[]>(() => {
@@ -162,9 +227,16 @@ export default function RecordListPage() {
     const fromSchema: DataTableColumn<RecordRow>[] = ordered.map((column) => ({
       id: column.name,
       header: columnLabel(column),
-      sortable: SORTABLE_TYPES.includes(column.type),
-      align: column.type === "number" ? "right" : undefined,
-      width: column === primary ? 200 : column.type === "richtext" || column.type === "textarea" ? 240 : 120,
+      sortable: isSortable(column),
+      align: valueType(column) === "number" ? "right" : undefined,
+      width:
+        column === primary
+          ? 200
+          : column.type === "richtext" || column.type === "textarea"
+            ? 240
+            : column.type === "choice"
+              ? 150 // room for the badge's words
+              : 120,
       hiddenByDefault: column !== primary && column.showInTable === false,
       hideable: column !== primary,
       mobile: column === primary ? "title" : FILE_TYPES.includes(column.type) ? "hidden" : undefined,
@@ -184,14 +256,27 @@ export default function RecordListPage() {
             {
               id: "_department",
               header: "Visible to",
-              width: 120,
+              width: 160,
               mobile: "subtitle" as const,
-              cell: (row: RecordRow) =>
-                row._department ? (
-                  <Badge variant="default" c={row._departmentId ? undefined : "dimmed"}>
-                    {String(row._department)}
-                  </Badge>
-                ) : null,
+              cell: (row: RecordRow) => {
+                const ids = (row._departmentIds as string[] | undefined) ?? [];
+                if (!ids.length) {
+                  return row._department ? (
+                    <Badge variant="default" c="dimmed">
+                      {String(row._department)}
+                    </Badge>
+                  ) : null;
+                }
+                return (
+                  <Group gap={4} wrap="nowrap">
+                    {ids.map((id) => (
+                      <Badge key={id} variant="default">
+                        {departmentNameById.get(id) ?? "Deleted department"}
+                      </Badge>
+                    ))}
+                  </Group>
+                );
+              },
             },
           ]
         : []),
@@ -225,7 +310,7 @@ export default function RecordListPage() {
       },
     ];
     return [...fromSchema, ...system];
-  }, [schema, showDepartment]);
+  }, [schema, showDepartment, departmentNameById]);
 
   const filterFields = useMemo<FilterField[]>(() => {
     if (!schema) return [];
@@ -233,6 +318,7 @@ export default function RecordListPage() {
       name: column.name,
       label: columnLabel(column),
       kind: filterKind(column),
+      options: column.type === "choice" ? (column.options ?? []).map((o) => ({ value: o.label, label: o.label })) : undefined,
       loadOptions:
         column.type === "user"
           ? loadPeople
@@ -251,7 +337,7 @@ export default function RecordListPage() {
         name: "_department",
         label: "Visible to",
         kind: "department",
-        options: (schema.allowedDepartments ?? []).map((d) => ({ value: d._id, label: d.name })),
+        options: (schema.departments ?? []).map((d) => ({ value: d._id, label: d.name })),
       });
     }
     return fields;
@@ -273,7 +359,15 @@ export default function RecordListPage() {
     });
 
   return (
-    <Page title={title} breadcrumbs={[{ label: "Tables" }, { label: title }]}>
+    <Page title={title} breadcrumbs={[appCrumb, { label: title }]}>
+      <LiveChangeBar
+        changes={liveChanges}
+        subject="list"
+        onRefresh={() => {
+          setLiveSince(Date.now());
+          qc.invalidateQueries({ queryKey: ["tableData", table] });
+        }}
+      />
       <PageHeader
         title={title}
         meta={
@@ -302,9 +396,21 @@ export default function RecordListPage() {
         actions={
           schema && (
             <>
+              {(boardColumns.length > 0 || dateColumns.length > 0) && (
+                <SegmentedControl
+                  aria-label="View"
+                  value={view}
+                  onChange={(v) => setViewParam("view", v === "table" ? null : v)}
+                  data={[
+                    { value: "table", label: <ViewLabel icon={IconTable} text="Table" /> },
+                    ...(boardColumns.length ? [{ value: "board", label: <ViewLabel icon={IconLayoutKanban} text="Board" /> }] : []),
+                    ...(dateColumns.length ? [{ value: "calendar", label: <ViewLabel icon={IconCalendarMonth} text="Calendar" /> }] : []),
+                  ]}
+                />
+              )}
               {/* tablets and up: separate buttons */}
               <Group gap="xs" visibleFrom="sm">
-                {perms.create && (
+                {(perms.create || perms.edit) && (
                   <Button variant="default" leftSection={<IconUpload size={16} />} onClick={() => setImportOpen(true)}>
                     Import
                   </Button>
@@ -335,7 +441,7 @@ export default function RecordListPage() {
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  {perms.create && (
+                  {(perms.create || perms.edit) && (
                     <Menu.Item leftSection={<IconUpload size={16} />} onClick={() => setImportOpen(true)}>
                       Import CSV
                     </Menu.Item>
@@ -369,6 +475,7 @@ export default function RecordListPage() {
         </Alert>
       )}
 
+      {view === "table" ? (
       <DataTable<RecordRow>
         label={title}
         mode="server"
@@ -419,24 +526,33 @@ export default function RecordListPage() {
             )}
           </>
         )}
-        selectable={Boolean(perms.delete)}
+        selectable={Boolean(perms.delete || (perms.edit && bulkFields(schema?.columns ?? []).length))}
         bulkActions={(ids, clear) => (
-          <Button
-            color="red"
-            variant="light"
-            leftSection={<IconTrash size={16} />}
-            loading={bulkDelete.isPending}
-            onClick={() =>
-              confirmDanger({
-                title: `Delete ${pluralize(ids.length, "record")}?`,
-                message: "This permanently deletes the selected records and their uploaded files. This can't be undone.",
-                confirmLabel: `Delete ${pluralize(ids.length, "record")}`,
-                onConfirm: () => bulkDelete.mutateAsync(ids).then(clear),
-              })
-            }
-          >
-            Delete
-          </Button>
+          <>
+            {perms.edit && bulkFields(schema?.columns ?? []).length > 0 && (
+              <Button variant="light" leftSection={<IconPencil size={16} />} onClick={() => setBulkEdit({ ids, clear })}>
+                Update
+              </Button>
+            )}
+            {perms.delete && (
+              <Button
+                color="red"
+                variant="light"
+                leftSection={<IconTrash size={16} />}
+                loading={bulkDelete.isPending}
+                onClick={() =>
+                  confirmDanger({
+                    title: `Delete ${pluralize(ids.length, "record")}?`,
+                    message: "This permanently deletes the selected records and their uploaded files. This can't be undone.",
+                    confirmLabel: `Delete ${pluralize(ids.length, "record")}`,
+                    onConfirm: () => bulkDelete.mutateAsync(ids).then(clear),
+                  })
+                }
+              >
+                Delete
+              </Button>
+            )}
+          </>
         )}
         storageKey={storageKey}
         isFiltered={isFiltered}
@@ -477,8 +593,68 @@ export default function RecordListPage() {
           )
         }
       />
+      ) : (
+        <Box
+          p="md"
+          bg="var(--app-surface)"
+          style={{ border: "1px solid var(--app-border)", borderRadius: "var(--mantine-radius-lg)" }}
+        >
+          <Stack gap="md">
+            <Group gap="xs" wrap="wrap" align="flex-start">
+              <TextInput
+                placeholder={`Search ${title.toLowerCase()}…`}
+                leftSection={<IconSearch size={16} />}
+                value={url.search}
+                onChange={(e) => setUrl({ search: e.currentTarget.value })}
+                w={{ base: "100%", sm: 260 }}
+                aria-label="Search"
+              />
+              {view === "board" && boardColumns.length > 1 && (
+                <Select
+                  aria-label="Group by"
+                  data={boardColumns.map((c) => ({ value: c.name, label: `By ${columnLabel(c)}` }))}
+                  value={groupBy?.name ?? null}
+                  onChange={(v) => v && setViewParam("by", v)}
+                  allowDeselect={false}
+                  w={180}
+                />
+              )}
+              {view === "calendar" && dateColumns.length > 1 && (
+                <Select
+                  aria-label="Date"
+                  data={dateColumns.map((c) => ({ value: c.name, label: `By ${columnLabel(c)}` }))}
+                  value={dateColumn?.name ?? null}
+                  onChange={(v) => v && setViewParam("on", v)}
+                  allowDeselect={false}
+                  w={180}
+                />
+              )}
+              {filterFields.length > 0 && (
+                <FilterBar fields={filterFields} value={url.filters} onChange={(filters) => setUrl({ filters })} />
+              )}
+            </Group>
+            {schema && view === "board" && groupBy && (
+              <BoardView table={table} schema={schema} groupBy={groupBy} search={url.search} filters={url.filters} />
+            )}
+            {schema && view === "calendar" && dateColumn && (
+              <CalendarView table={table} schema={schema} dateColumn={dateColumn} search={url.search} filters={url.filters} />
+            )}
+          </Stack>
+        </Box>
+      )}
 
-      {schema && perms.create && (
+      {schema && bulkEdit && (
+        <BulkUpdateModal
+          table={table}
+          columns={schema.columns}
+          ids={bulkEdit.ids}
+          opened
+          onClose={() => setBulkEdit(null)}
+          onDone={bulkEdit.clear}
+        />
+      )}
+
+      {schema && (perms.create || perms.edit) && (
         <ImportCsvModal
           opened={importOpen}
           onClose={() => setImportOpen(false)}

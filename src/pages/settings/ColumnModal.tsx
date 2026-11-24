@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Badge,
   Button,
   Group,
   Modal,
@@ -19,7 +18,12 @@ import { useMediaQuery } from "@mantine/hooks";
 import { errorMessage } from "../../api/api";
 import { useAddColumn, useTables, useUpdateColumn } from "../../api/reactQueryHooks/useTables";
 import { tableTitle } from "../../layout/nav";
-import { columnTypeInfo, columnTypes, INDEXABLE_TYPES, INDEXED_HELP, slugify } from "./columnTypes";
+import type { ChoiceOption, RollupConfig } from "../../features/records/schema";
+import { ChoiceOptionsEditor } from "./ChoiceOptionsEditor";
+import { DefaultValueInput } from "./DefaultValueInput";
+import { FormulaEditor } from "./FormulaEditor";
+import { RollupEditor } from "./RollupEditor";
+import { columnTypeInfo, columnTypes, INDEXABLE_TYPES, INDEXED_HELP, optionsError, slugify } from "./columnTypes";
 import classes from "./settings.module.css";
 
 export type SchemaColumn = {
@@ -32,6 +36,12 @@ export type SchemaColumn = {
   indexed?: boolean;
   ref?: string | null;
   multiple?: boolean;
+  options?: ChoiceOption[];
+  default?: unknown;
+  autonumber?: { prefix: string };
+  formula?: { expression: string; type?: string };
+  rollup?: RollupConfig;
+  inline?: boolean;
 };
 
 const COLUMN_NAME = /^[a-zA-Z0-9_][a-zA-Z0-9_ -]{0,62}$/;
@@ -45,6 +55,13 @@ type Values = {
   showInTable: boolean;
   ref: string | null;
   multiple: boolean;
+  options: ChoiceOption[];
+  // null = no default
+  default: unknown;
+  prefix: string;
+  expression: string;
+  rollup: Partial<RollupConfig>;
+  inline: boolean;
 };
 
 const NEW_COLUMN: Values = {
@@ -56,7 +73,23 @@ const NEW_COLUMN: Values = {
   showInTable: true,
   ref: null,
   multiple: false,
+  options: [],
+  default: null,
+  prefix: "",
+  expression: "",
+  rollup: {},
+  inline: false,
 };
+
+// INV-0001 for the prefix "INV-"
+const autonumberExample = (prefix: string, n = 1) =>
+  `${prefix.trim().split("{YYYY}").join(String(new Date().getFullYear()))}${String(n).padStart(4, "0")}`;
+
+// column types that can have a default value (the API checks the same)
+const DEFAULTABLE_TYPES = ["text", "textarea", "number", "boolean", "choice", "date", "user", "department"];
+
+// Text columns become a Choice using the values already in them
+const TEXT_TYPES = ["text", "textarea"];
 
 // Type picker: icon + name + one-line description per column type.
 function TypePicker({ value, onChange }: { value: string; onChange: (type: string) => void }) {
@@ -130,6 +163,16 @@ export function ColumnModal({
                 ? "A column with this name already exists"
                 : null,
       ref: (v, values) => (!editing && values.type === "relation" && !v ? "Choose the table to link to" : null),
+      options: (v, values) => (values.type === "choice" && !convertingToChoice(values.type) ? optionsError(v) : null),
+      expression: (v, values) => (values.type === "formula" && !v.trim() ? "Enter a formula" : null),
+      rollup: (v, values) =>
+        values.type !== "rollup"
+          ? null
+          : !v.from || !v.via
+            ? "Choose the linked records"
+            : v.fn && v.fn !== "count" && !v.field
+              ? "Choose the field to work out"
+              : null,
     },
   });
 
@@ -147,6 +190,12 @@ export function ColumnModal({
             showInTable: column.showInTable !== false,
             ref: column.ref ?? null,
             multiple: Boolean(column.multiple),
+            options: column.options ?? [],
+            default: column.default ?? null,
+            prefix: column.autonumber?.prefix ?? "",
+            expression: column.formula?.expression ?? "",
+            rollup: column.rollup ?? {},
+            inline: Boolean(column.inline),
           }
         : NEW_COLUMN
     );
@@ -156,9 +205,28 @@ export function ColumnModal({
   }, [opened, column]);
 
   const indexable = INDEXABLE_TYPES.includes(form.values.type);
+  // editing a Text column into a Choice: the options come from its values
+  function convertingToChoice(type: string) {
+    return editing && type === "choice" && column?.type !== "choice";
+  }
   const setType = (type: string) => {
     form.setFieldValue("type", type);
+    if (type !== form.values.type) form.setFieldValue("default", null); // it wouldn't fit the new type
     if (!INDEXABLE_TYPES.includes(type)) form.setFieldValue("indexed", false);
+  };
+
+  // a choice default follows its option when it's renamed, and goes when it's removed
+  const setOptions = (next: ChoiceOption[]) => {
+    const current = form.values.default;
+    if (current !== null) {
+      const follow = (label: unknown) => {
+        const id = form.values.options.find((o) => o.label === label)?.id;
+        return id ? next.find((o) => o.id === id)?.label : undefined;
+      };
+      const moved = Array.isArray(current) ? current.map(follow).filter(Boolean) : follow(current);
+      form.setFieldValue("default", Array.isArray(moved) ? (moved.length ? moved : null) : (moved ?? null));
+    }
+    form.setFieldValue("options", next);
   };
 
   const submit = form.onSubmit(async (v) => {
@@ -170,6 +238,12 @@ export function ColumnModal({
           showInTable: v.showInTable,
           required: v.required,
           indexed: indexable && v.indexed,
+          ...(v.type === "choice" && column?.type === "choice" ? { options: v.options } : {}),
+          default: DEFAULTABLE_TYPES.includes(v.type) ? (v.default ?? null) : null,
+          ...(v.type === "autonumber" ? { autonumber: { prefix: v.prefix } } : {}),
+          ...(v.type === "formula" ? { formula: { expression: v.expression } } : {}),
+          ...(v.type === "rollup" ? { rollup: { fn: "count", ...v.rollup } } : {}),
+          ...(v.type === "relation" && !v.multiple ? { inline: v.inline } : {}),
         });
       } else {
         await add.mutateAsync({
@@ -180,22 +254,51 @@ export function ColumnModal({
           required: v.required,
           indexed: indexable && v.indexed,
           ref: v.type === "relation" ? v.ref : null,
-          multiple: ["relation", "user", "department"].includes(v.type) ? v.multiple : false,
+          multiple: ["relation", "user", "department", "choice"].includes(v.type) ? v.multiple : false,
+          ...(v.type === "choice" ? { options: v.options } : {}),
+          ...(DEFAULTABLE_TYPES.includes(v.type) && v.default !== null ? { default: v.default } : {}),
+          ...(v.type === "autonumber" ? { autonumber: { prefix: v.prefix } } : {}),
+          ...(v.type === "formula" ? { formula: { expression: v.expression } } : {}),
+          ...(v.type === "rollup" ? { rollup: { fn: "count", ...v.rollup } } : {}),
+          ...(v.type === "relation" && !v.multiple ? { inline: v.inline } : {}),
         });
       }
       onClose();
     } catch (err) {
-      form.setErrors({ label: errorMessage(err, "Couldn't save the column") });
+      const message = errorMessage(err, "Couldn't save the column");
+      // formula problems belong under the formula
+      form.setErrors(
+        v.type === "formula" && /formula/i.test(message)
+          ? { expression: message }
+          : v.type === "rollup" && /total/i.test(message)
+            ? { rollup: message }
+            : { label: message }
+      );
     }
   });
 
   // editing: links and people store ids, so their type is fixed, and other
   // columns can't become one (existing values couldn't be converted)
-  const ID_TYPES = ["relation", "user", "department"];
+  const ID_TYPES = ["relation", "user", "department", "autonumber", "formula", "rollup"];
   const fixedType = ID_TYPES.includes(column?.type ?? "");
-  const editTypes = columnTypes
-    .filter((t) => (fixedType ? t.value === column?.type : !ID_TYPES.includes(t.value)))
-    .map((t) => ({ value: t.value, label: t.label }));
+  // Choice <-> Text only (their values are plain text)
+  const allowedEditType = (type: string) => {
+    if (fixedType) return type === column?.type;
+    if (ID_TYPES.includes(type)) return false;
+    if (column?.type === "choice") return type === "choice" || TEXT_TYPES.includes(type);
+    return type !== "choice" || TEXT_TYPES.includes(column?.type ?? "");
+  };
+  const editTypes = columnTypes.filter((t) => allowedEditType(t.value)).map((t) => ({ value: t.value, label: t.label }));
+  const typeHelp = () => {
+    if (column?.type === "relation") return `Links to ${tableTitle(column.ref ?? "")}. Delete and re-add the column to link elsewhere.`;
+    if (fixedType) return `${columnTypeInfo(column!.type).label} columns keep their type. Delete and re-add the column to change it.`;
+    if (convertingToChoice(form.values.type)) {
+      return "The options are made from the values already in this column. You can rename, recolour or remove them afterwards.";
+    }
+    if (column?.type === "choice" && form.values.type !== "choice") return "Each record keeps its choice as text.";
+    if (column?.type === "choice") return "Can be changed to Text.";
+    return "Changing the type doesn't convert existing values.";
+  };
 
   const tableOptions = (tables as { tableName: string }[]).map((t) => ({
     value: t.tableName,
@@ -220,13 +323,7 @@ export function ColumnModal({
               onChange={(v) => v && setType(v)}
               allowDeselect={false}
               disabled={fixedType}
-              description={
-                column?.type === "relation"
-                  ? `Links to ${tableTitle(column.ref ?? "")}. Delete and re-add the column to link elsewhere.`
-                  : fixedType
-                    ? `${columnTypeInfo(column!.type).label} columns keep their type. Delete and re-add the column to change it.`
-                    : "Changing the type doesn't convert existing values."
-              }
+              description={typeHelp()}
             />
           ) : (
             <Stack gap={6}>
@@ -255,7 +352,6 @@ export function ColumnModal({
               label="Column name"
               description={editing ? "Can't be changed once created" : "Used in imports, exports and the API"}
               placeholder="e.g. order_date"
-              ff="monospace"
               withAsterisk={!editing}
               disabled={editing}
               {...form.getInputProps("name")}
@@ -285,6 +381,14 @@ export function ColumnModal({
             </SimpleGrid>
           )}
 
+          {form.values.type === "relation" && !form.values.multiple && form.values.ref && (
+            <Switch
+              label={`Edit these inside the ${tableTitle(form.values.ref)} form`}
+              description={`Like an invoice's lines: add and change them while editing a ${tableTitle(form.values.ref).toLowerCase()} record`}
+              {...form.getInputProps("inline", { type: "checkbox" })}
+            />
+          )}
+
           {(form.values.type === "user" || form.values.type === "department") && !editing && (
             <Switch
               label={form.values.type === "user" ? "Allow several people" : "Allow several departments"}
@@ -297,28 +401,88 @@ export function ColumnModal({
             />
           )}
 
-          <Stack gap="sm">
-            <Switch
-              label="Required"
-              description="Records can't be saved without a value"
-              {...form.getInputProps("required", { type: "checkbox" })}
+          {form.values.type === "choice" && !convertingToChoice(form.values.type) && (
+            <ChoiceOptionsEditor
+              value={form.values.options}
+              onChange={setOptions}
+              error={form.errors.options as string | undefined}
+              editing={editing}
             />
+          )}
+
+          {form.values.type === "choice" && !editing && (
+            <Switch
+              label="Allow several choices"
+              description="e.g. tags or skills instead of one status"
+              {...form.getInputProps("multiple", { type: "checkbox" })}
+            />
+          )}
+
+          {DEFAULTABLE_TYPES.includes(form.values.type) && !convertingToChoice(form.values.type) && (
+            <DefaultValueInput
+              type={form.values.type}
+              multiple={form.values.multiple}
+              options={form.values.options}
+              value={form.values.default}
+              onChange={(value) => form.setFieldValue("default", value)}
+            />
+          )}
+
+          {form.values.type === "formula" && (
+            <FormulaEditor
+              table={table}
+              columnName={editing ? column?.name : undefined}
+              value={form.values.expression}
+              onChange={(expression) => form.setFieldValue("expression", expression)}
+              error={form.errors.expression as string | undefined}
+            />
+          )}
+
+          {form.values.type === "rollup" && (
+            <RollupEditor
+              table={table}
+              value={form.values.rollup}
+              onChange={(rollup) => form.setFieldValue("rollup", rollup)}
+              error={form.errors.rollup as string | undefined}
+            />
+          )}
+
+          {form.values.type === "autonumber" && (
+            <TextInput
+              label="Prefix"
+              placeholder="e.g. INV-"
+              description={
+                editing
+                  ? `A new prefix is used for new records only. Next one looks like ${autonumberExample(form.values.prefix)}.`
+                  : `Records are numbered ${autonumberExample(form.values.prefix)}, ${autonumberExample(form.values.prefix, 2)}, … Add {YYYY} for the year (numbering then restarts each year).`
+              }
+              maxLength={30}
+              {...form.getInputProps("prefix")}
+            />
+          )}
+
+          <Stack gap="sm">
+            {/* auto-numbers and formulas are always filled in */}
+            {!["autonumber", "formula", "rollup"].includes(form.values.type) && (
+              <Switch
+                label="Required"
+                description="Records can't be saved without a value"
+                {...form.getInputProps("required", { type: "checkbox" })}
+              />
+            )}
             <Switch
               label="Show in the records list"
               description="Users can still show or hide it from the table's view options"
               {...form.getInputProps("showInTable", { type: "checkbox" })}
             />
-            <Switch
-              label={
-                <Group gap={6}>
-                  Indexed for fast sorting
-                  {!indexable && <Badge size="xs" color="gray">Not available for {columnTypeInfo(form.values.type).label}</Badge>}
-                </Group>
-              }
-              description={INDEXED_HELP}
-              disabled={!indexable}
-              {...form.getInputProps("indexed", { type: "checkbox" })}
-            />
+            {/* only shown where it applies: fewer switches to read */}
+            {indexable && (
+              <Switch
+                label="Indexed for fast sorting"
+                description={INDEXED_HELP}
+                {...form.getInputProps("indexed", { type: "checkbox" })}
+              />
+            )}
           </Stack>
 
           <Group justify="flex-end" gap="xs" mt="xs">

@@ -132,11 +132,56 @@ shadows in components.**
  248 px (or a 64 px icon rail)
 ```
 
+### Record page (`pages/records/RecordDetailPage.tsx`)
+
+- **The header:** the name, then the table's name and up to 3 choice values
+  as badges, then one-tap **Call / WhatsApp / Email / Website** when the
+  record has them (`features/records/contactValues.ts`).
+- **Details:** two columns of cells on desktop and tablets, one on phones;
+  label above value, with a hairline under each cell (`.detail-cell`).
+  Long links and emails stay on one line ("…", the full value on hover).
+  **Every field is shown in its place,** empty ones with a light "—", so
+  records of a table look alike. No layout toggle. The title field isn't repeated; long text, pictures and files get
+  full-width blocks.
+- **Phone numbers, emails and links are always tappable.** WhatsApp is
+  offered only for mobile numbers.
+- **Linked tables with nothing yet** share one "Linked records" card with an
+  Add button each.
+- **Activity:** creating a record is one line ("Created the record").
+
+### Files and pictures (`features/files/`)
+
+- **Open uploads in the in-app viewer:** call `openFiles([...], index)`. Never
+  link to the raw `/uploads/…` URL in a new tab: uploads are served with a
+  `sandbox` security header, under which browsers won't show PDFs.
+- **What the viewer shows:**
+  - pictures large, with previous / next (arrow keys too);
+  - PDFs inside the app (fetched with the sign-in, shown from memory);
+  - video and audio players;
+  - text and CSV as text;
+  - anything else: "No preview" plus **Download** (which saves under the
+    real file name).
+  - On phones it fills the screen.
+- **Thumbnails** sit side by side, never overlapping (each must be
+  clickable). In lists, a click opens the viewer, not the record.
+
 ### Sidebar (`src/layout/Sidebar.tsx`)
 
-- **Order:** Home and workspace pages, then the **Tables** the user can access
-  (with a filter box once there are 8 or more), then **Administration** (admins
-  only).
+- **Order:** Home and workspace pages, then the **Tables** the user can access,
+  then **Administration** (admins only). No filter box: finding a table by
+  name is the search's job (Ctrl K), which is at the top of the sidebar.
+- **Apps** (3 or more installed):
+  - **On Home and settings pages:** the sidebar lists the apps, each with
+    its **own colour** (`appColor()` in `features/apps/appIcons.ts`, by
+    icon, so an app looks the same everywhere: sidebar, Home, Manage apps,
+    search).
+  - **Inside an app:** its tables, under a **switcher** (coloured icon, name,
+    "Switch app"). The switcher opens the **launcher**: a grid of app
+    tiles, with search from 10 apps on, plus links to Home and Manage apps.
+- **Administration** folds away under its heading:
+  - it remembers open or closed per browser (`adminOpen`), and is always
+    open on settings pages;
+  - in the icon rail it becomes a single gear with the pages in a menu.
 - **Active item:** accent background. One active item at a time.
 - **Collapsing:** desktops can collapse to a 64 px **icon rail**, with tooltips
   on every icon and the choice remembered. Tablets get the rail by default.

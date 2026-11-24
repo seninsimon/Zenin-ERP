@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ActionIcon,
   Badge,
@@ -6,6 +7,8 @@ import {
   Button,
   Drawer,
   Grid,
+  Anchor,
+  Group,
   Menu,
   SimpleGrid,
   Skeleton,
@@ -14,7 +17,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
-import { IconCopy, IconDots, IconHistory, IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconCopy, IconDots, IconHistory, IconPencil, IconTable, IconTrash } from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useDeleteRecord, useRecord } from "../../api/reactQueryHooks/useRecords";
@@ -26,19 +29,26 @@ import { editRecordPath, newRecordPath, tablePath, tableTitle } from "../../layo
 import { formatDateTime, formatRelative, isEmptyValue } from "../../lib/format";
 import { RichTextView } from "../../features/records/fields/RichText";
 import { RecordActivity } from "../../features/records/RecordActivity";
+import { CommentsSection } from "../../features/records/CommentsSection";
+import { RelatedRecords } from "../../features/records/RelatedRecords";
 import { RelationLinks } from "../../features/records/RelationLinks";
+import { ContactValue, QuickActions } from "../../features/records/ContactLinks";
+import { contactKind, firstContacts } from "../../features/records/contactValues";
 import { UserNames } from "../../features/records/UserNames";
 import { DepartmentNames } from "../../features/records/DepartmentNames";
 import { NoTableAccess, RecordNotFound } from "../../features/records/states";
 import {
   columnLabel,
   FILE_TYPES,
-  FULL_WIDTH_TYPES,
   httpStatus,
+  isMissing,
   recordTitle,
   type RecordColumn,
   type TableSchemaInfo,
 } from "../../features/records/schema";
+import { useAppCrumb } from "../../features/apps/appMenu";
+import { LiveChangeBar } from "../../features/live/LiveChangeBar";
+import { useLiveChanges } from "../../features/live/live";
 
 function DetailValue({
   column,
@@ -49,6 +59,8 @@ function DetailValue({
   value: unknown;
   canOpenRef: boolean;
 }) {
+  const contact = contactKind(column, value);
+  if (contact) return <ContactValue kind={contact} value={String(value)} />;
   if (column.type === "relation") return <RelationLinks column={column} value={value} canOpen={canOpenRef} />;
   if (column.type === "user") return <UserNames value={value} />;
   if (column.type === "department") return <DepartmentNames value={value} />;
@@ -68,6 +80,11 @@ function DetailValue({
 
 export default function RecordDetailPage() {
   const { table = "", id = "" } = useParams();
+  const appCrumb = useAppCrumb(); // "HR & leave" when inside an app
+  // "Hana changed this record · Refresh"
+  const qc = useQueryClient();
+  const [liveSince, setLiveSince] = useState(() => Date.now());
+  const liveChanges = useLiveChanges(table, liveSince, id);
   const navigate = useNavigate();
   const title = tableTitle(table);
   const listPath = tablePath(table);
@@ -102,7 +119,7 @@ export default function RecordDetailPage() {
     const prefill = Object.fromEntries(
       columns.filter((c) => !FILE_TYPES.includes(c.type)).map((c) => [c.name, record[c.name]])
     );
-    navigate(newRecordPath(table), { state: { prefill, departmentId: record._departmentId } });
+    navigate(newRecordPath(table), { state: { prefill, departmentIds: record._departmentIds } });
   };
 
   const askDelete = () =>
@@ -112,6 +129,32 @@ export default function RecordDetailPage() {
       confirmLabel: "Delete record",
       onConfirm: () => deleteRecord.mutateAsync(id).then(() => navigate(listPath)),
     });
+
+  // The fields, sorted for reading: the title isn't repeated, short fields in
+  // rows, long text and files in their own blocks, empty ones tucked away.
+  const titleColumn = record ? columns.find((c) => ["text", "autonumber", "textarea"].includes(c.type) && String(record[c.name] ?? "").trim() === name) : undefined;
+  const LONG = ["textarea", "richtext", "image", "images", "file", "files"];
+  const fields = columns.filter((c) => c !== titleColumn);
+  // every field, always in the same place (empty ones show a light "—"),
+  // so each record of a table looks the same and gaps are seen at a glance
+  const shortFields = fields.filter((c) => !LONG.includes(c.type));
+  const longFields = fields.filter((c) => LONG.includes(c.type));
+  const badges = record ? columns.filter((c) => c.type === "choice" && !isMissing(c, record[c.name])).slice(0, 3) : [];
+  const contacts = record ? firstContacts(columns, record) : {};
+  const row = (column: RecordColumn) => (
+    <Box key={column.name} className="detail-cell">
+      <Text component="dt" size="xs" c="dimmed" fw={500} mb={4}>
+        {columnLabel(column)}
+      </Text>
+      <Box component="dd" m={0} style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+        {record && isMissing(column, record[column.name]) ? (
+          EMPTY
+        ) : (
+          <DetailValue column={column} value={record?.[column.name]} canOpenRef={Boolean(column.ref && readableTables.has(column.ref))} />
+        )}
+      </Box>
+    </Box>
+  );
 
   const updatedAt = record?._updatedAt as string | undefined;
   const createdAt = record?._createdAt as string | undefined;
@@ -124,18 +167,55 @@ export default function RecordDetailPage() {
   return (
     <Page
       title={loading ? title : `${name} · ${title}`}
-      breadcrumbs={[{ label: "Tables" }, { label: title, to: listPath }, { label: loading ? "…" : name }]}
+      breadcrumbs={[appCrumb, { label: title, to: listPath }, { label: loading ? "…" : name }]}
       width="wide"
     >
+      <LiveChangeBar
+        changes={liveChanges}
+        subject="record"
+        onRefresh={() => {
+          setLiveSince(Date.now());
+          for (const key of ["singleData", "related"]) qc.invalidateQueries({ queryKey: [key] });
+          qc.invalidateQueries({ queryKey: ["audit", "record", table, id] });
+        }}
+      />
       <PageHeader
         title={loading ? <Skeleton h={28} w={220} /> : name}
+        below={
+          record && (
+            <Stack gap="xs" mt={2}>
+              <Group gap="xs" wrap="wrap">
+                <Group gap={4} wrap="nowrap">
+                  <IconTable size={14} color="var(--mantine-color-dimmed)" />
+                  <Anchor component={Link} to={listPath} size="sm" c="dimmed">
+                    {title}
+                  </Anchor>
+                </Group>
+                {badges.map((c) => (
+                  <Tooltip key={c.name} label={columnLabel(c)}>
+                    <Box>
+                      <FieldValue column={c} value={record[c.name]} variant="detail" />
+                    </Box>
+                  </Tooltip>
+                ))}
+              </Group>
+              <QuickActions contacts={contacts} />
+            </Stack>
+          )
+        }
         meta={
           record && (
             <>
               {/* "Visible to": only interesting when the table is shared with several departments */}
-              {record._departmentName && (schema?.departments?.length ?? 0) > 1 ? (
+              {schema?.byDepartment === false ? null : record._departmentName && (schema?.departments?.length ?? 0) > 1 ? (
                 <Tooltip label="Visible to">
-                  <Badge variant="default">{String(record._departmentName)}</Badge>
+                  <Group gap={4}>
+                    {((record._departmentIds as string[] | undefined) ?? []).map((d) => (
+                      <Badge key={d} variant="default">
+                        {schema?.departments?.find((x) => x._id === d)?.name ?? "Deleted department"}
+                      </Badge>
+                    ))}
+                  </Group>
                 </Tooltip>
               ) : record._departmentId === null && schema?.departments?.length ? (
                 <Tooltip label="Not in any department yet: only admins can see it">
@@ -198,49 +278,52 @@ export default function RecordDetailPage() {
 
       <Grid gutter="lg" align="flex-start">
         <Grid.Col span={{ base: 12, lg: 8 }}>
-          <Section title="Details">
-            {loading ? (
-              <Grid gutter="lg">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Grid.Col key={i} span={{ base: 12, sm: 6 }}>
-                    <Stack gap={6}>
-                      <Skeleton h={10} w={80} />
-                      <Skeleton h={16} w="70%" />
-                    </Stack>
-                  </Grid.Col>
-                ))}
-              </Grid>
-            ) : (
-              // <dl> may only contain <div> groups of <dt>/<dd>, so this is a
-              // plain CSS grid rather than Mantine Grid (which adds a wrapper div)
-              <SimpleGrid component="dl" cols={{ base: 1, sm: 2 }} spacing="lg" verticalSpacing="lg" m={0}>
-                {columns.map((column) => (
-                  <Box
-                    key={column.name}
-                    style={{ gridColumn: FULL_WIDTH_TYPES.includes(column.type) ? "1 / -1" : undefined, minWidth: 0 }}
-                  >
-                    <Text component="dt" size="xs" c="dimmed" fw={500} mb={4}>
-                      {columnLabel(column)}
-                    </Text>
-                    <Box component="dd" m={0} style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                      <DetailValue
-                        column={column}
-                        value={record[column.name]}
-                        canOpenRef={Boolean(column.ref && readableTables.has(column.ref))}
-                      />
+          <Stack gap="lg">
+            <Section title="Details">
+              {loading ? (
+                <Grid gutter="lg">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Grid.Col key={i} span={{ base: 12, sm: 6 }}>
+                      <Stack gap={6}>
+                        <Skeleton h={10} w={80} />
+                        <Skeleton h={16} w="70%" />
+                      </Stack>
+                    </Grid.Col>
+                  ))}
+                </Grid>
+              ) : (
+                <Stack gap="lg">
+                  {/* short fields: two columns of cells, label above value */}
+                  {shortFields.length > 0 && (
+                    <SimpleGrid component="dl" cols={{ base: 1, sm: 2 }} spacing={32} verticalSpacing={0} m={0}>
+                      {shortFields.map(row)}
+                    </SimpleGrid>
+                  )}
+                  {/* long text, pictures and files: their own full-width blocks */}
+                  {longFields.map((column) => (
+                    <Box key={column.name}>
+                      <Text size="sm" fw={600} mb={6}>
+                        {columnLabel(column)}
+                      </Text>
+                      {isMissing(column, record[column.name]) ? EMPTY : <DetailValue column={column} value={record[column.name]} canOpenRef={false} />}
                     </Box>
-                  </Box>
-                ))}
-              </SimpleGrid>
+                  ))}
+                </Stack>
+              )}
+              {createdAt && (
+                <Text size="xs" c="dimmed" mt="lg" pt="md" style={{ borderTop: "1px solid var(--app-border)" }}>
+                  Created {formatDateTime(createdAt)}
+                  {createdBy ? ` by ${createdBy}` : ""}
+                  {updatedAt && updatedAt !== createdAt ? ` · Last updated ${formatDateTime(updatedAt)}` : ""}
+                </Text>
+              )}
+  </Section>
+            {/* records elsewhere that link here: a project's tasks, a customer's orders */}
+            {!loading && (
+              <RelatedRecords table={table} recordId={id} recordName={name} departmentIds={(record._departmentIds as string[] | undefined) ?? []} />
             )}
-            {createdAt && (
-              <Text size="xs" c="dimmed" mt="lg" pt="md" style={{ borderTop: "1px solid var(--app-border)" }}>
-                Created {formatDateTime(createdAt)}
-                {createdBy ? ` by ${createdBy}` : ""}
-                {updatedAt && updatedAt !== createdAt ? ` · Last updated ${formatDateTime(updatedAt)}` : ""}
-              </Text>
-            )}
-          </Section>
+            {!loading && <CommentsSection table={table} id={id} />}
+          </Stack>
         </Grid.Col>
 
         {wide && (

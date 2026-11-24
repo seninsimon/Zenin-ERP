@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Box, Group, Stack, Text, Title } from "@mantine/core";
+import { useBranding } from "../../lib/branding";
 
 /* ------------------------------------------------------------------ */
 /* Breadcrumbs: pages declare them, the header shows them.             */
@@ -17,7 +18,6 @@ export function PageMetaProvider({ children }: { children: ReactNode }) {
 
 export const usePageMeta = () => useContext(PageMetaContext);
 
-const APP_NAME = "Zenin ERP";
 
 /* ------------------------------------------------------------------ */
 /* <Page>: every route renders inside one.                             */
@@ -48,9 +48,10 @@ export function Page({
   const { setCrumbs } = usePageMeta();
   const crumbKey = JSON.stringify(breadcrumbs ?? [{ label: title }]);
 
+  const { name: appName } = useBranding();
   useEffect(() => {
-    document.title = `${title} · ${APP_NAME}`;
-  }, [title]);
+    document.title = `${title} · ${appName}`;
+  }, [title, appName]);
 
   useEffect(() => {
     setCrumbs(JSON.parse(crumbKey));
@@ -79,9 +80,12 @@ export function PageHeader({
   meta,
   actions,
   icon,
+  below,
 }: {
   title: ReactNode;
   description?: ReactNode;
+  // anything under the title (badges, buttons): not wrapped in a paragraph
+  below?: ReactNode;
   // small badges/info next to the title
   meta?: ReactNode;
   // buttons on the right; put the primary action LAST
@@ -104,6 +108,7 @@ export function PageHeader({
               {description}
             </Text>
           )}
+          {below}
         </Stack>
       </Group>
       {actions && (

@@ -53,4 +53,4 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t zenvo-api .
+      - run: docker build -t zenin-erp-api .

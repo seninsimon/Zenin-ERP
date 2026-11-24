@@ -1,4 +1,4 @@
-# Zenvo
+# Zenin-ERP
 
 ## What's where
 
@@ -13,7 +13,7 @@
 Each app keeps its own `package.json` and lockfile. A shared pnpm workspace
 comes with the developer kit (`packages/sdk`, ROADMAP Phase 3). Settings
 (`.env` files), backups and build output are never committed (`.gitignore`).
-Business notes and plans live in the separate, private `Zenvo-notes`
+Business notes and plans live in the separate, private `Zenin-ERP-notes`
 repository.
 
 

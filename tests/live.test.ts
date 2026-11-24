@@ -64,6 +64,7 @@ describe("Live updates", async () => {
     await wait(500);
     samTab.close();
 
+    expect(samTab.events[0]?.name).toBe("hello"); // the browser knows the stream flows
     const changes = samTab.events.filter((e) => e.name === "change").map((e) => e.data);
     expect(changes).toEqual([
       expect.objectContaining({ table, id, byName: "Administrator", deleted: false }),

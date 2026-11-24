@@ -97,8 +97,13 @@ export function eventsHandler(req: Request, res: Response) {
     "X-Accel-Buffering": "no", // nginx: pass it through as it comes
   });
   res.write("retry: 5000\n\n");
+  // "hello" at once and a visible "ping" every 25 s: the browser can tell
+  // the stream really flows. Something in between that holds it back (a
+  // Cloudflare Quick Tunnel, some office proxies) shows up as silence, and the
+  // app then checks every few seconds instead (features/live/live.ts).
+  send(client, "hello", {});
   clients.add(client);
-  const heartbeat = setInterval(() => res.write(": ping\n\n"), HEARTBEAT_MS);
+  const heartbeat = setInterval(() => send(client, "ping", {}), HEARTBEAT_MS);
   const limit = setTimeout(() => res.end(), MAX_STREAM_MS);
   req.on("close", () => {
     clearInterval(heartbeat);

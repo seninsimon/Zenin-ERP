@@ -12,7 +12,7 @@ import { audit } from "../repo/auditRepo.js";
 import { getUserById } from "../repo/userRepo.js";
 import { notify } from "../schema/automations.js";
 
-// Team chat (workspace/CHAT_PLAN.md). Messages go out live to the channel's
+// Team chat. Messages go out live to the channel's
 // people; @mentions also ring the bell (chat is never emailed).
 
 const MAX_LENGTH = 4000;

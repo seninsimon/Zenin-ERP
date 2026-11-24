@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { checkLimits, recordUsage } from "../src/ai/usage.js";
 import { login, unique } from "./helpers.js";
 
-// workspace/AI_PLAN.md: the admin picks the AI that drafts apps and pastes its
+// The admin picks the AI that drafts apps and pastes its
 // key in Administration → AI. The providers are never really called here:
 // fetch is replaced with canned answers.
 const KEY_G = "AIzaTEST-gemini-key-0123456789abcdef";
@@ -116,7 +116,7 @@ describe("AI settings", async () => {
     expect((await admin.get("/api/apps")).body.aiDrafts).toBe(false);
   });
 
-  describe("features, usage and limits (AI_FEATURES_PLAN.md)", () => {
+  describe("features, usage and limits", () => {
     const usage = async () => (await admin.get("/api/ai/usage").expect(200)).body;
     // a Gemini draft that used 2,000 tokens in and 3,000 + 1,000 thinking out
     const geminiDraft = () =>

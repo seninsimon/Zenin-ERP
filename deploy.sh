@@ -10,14 +10,14 @@
 #   ./deploy.sh wipe               delete ALL data and files, keep the system (asks you to type WIPE)
 #   ./deploy.sh demo [--size=small|medium|large]   load the demo company into an empty system
 #   ./deploy.sh stop | start       stop or start the whole system
-#   ./deploy.sh public [token]     make it reachable from anywhere over HTTPS (free; see docs/DEPLOYMENT.md)
+#   ./deploy.sh public [token]     make it reachable from anywhere over HTTPS (free; see docs/COMMANDS.md)
 #   ./deploy.sh private            turn public access off again (office network only)
 #
 # Install option:  --allow-sleep   don't disable suspend/hibernate on this computer
 #
 # Safe to run again at any time: it keeps your data and settings, backs up the
 # database first, rebuilds, and waits until everything is healthy.
-# Full guide: docs/DEPLOYMENT.md
+# Full guide: docs/COMMANDS.md
 set -Eeuo pipefail
 
 CALLER_PWD=$PWD
@@ -325,13 +325,13 @@ summary() {
   printf '  Ask your router admin to give this computer a fixed IP (%s), so the address never changes.\n' "$ip"
   case "$(tunnel_mode)" in
   named | free) show_public || true ;;
-  *) printf '  To make it reachable from anywhere over HTTPS, free:  ./deploy.sh public   (see docs/DEPLOYMENT.md)\n' ;;
+  *) printf '  To make it reachable from anywhere over HTTPS, free:  ./deploy.sh public   (see docs/COMMANDS.md)\n' ;;
   esac
   printf '  Manage it with:  ./deploy.sh status | logs | backup | restore | password | stop | start\n\n'
 }
 
 cmd_deploy() {
-  [ "$(uname -s)" = Linux ] || die "this script supports Linux servers only (see docs/DEPLOYMENT.md)"
+  [ "$(uname -s)" = Linux ] || die "this script supports Linux servers only (see docs/COMMANDS.md)"
   [ -f docker-compose.yml ] || die "run this from the erp folder (docker-compose.yml not found)"
   command -v curl >/dev/null || die "curl is required: sudo apt install curl"
   if [ -n "$SUDO" ]; then

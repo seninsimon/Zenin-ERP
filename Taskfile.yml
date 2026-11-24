@@ -222,7 +222,7 @@ tasks:
   # ---------------------------------------------------------------- deployed ERP (./deploy.sh)
 
   deploy:
-    desc: Install or update the always-on deployed ERP (see DEPLOYMENT.md)
+    desc: Install or update the always-on deployed ERP (see docs/COMMANDS.md)
     interactive: true
     cmds:
       - ./deploy.sh

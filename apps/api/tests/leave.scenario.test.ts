@@ -3,7 +3,7 @@ import { upgradeInstalledApps } from "../src/apps/installer.js";
 import { query } from "../src/db/pool.js";
 import { login, unique } from "./helpers.js";
 
-// workspace/LOGIC_REVIEW.md: Hana runs HR, Sam and Kiran are engineers.
+// Hana runs HR, Sam and Kiran are engineers.
 describe("Leave: an engineer asks, HR approves", async () => {
   const admin = await login();
   const remove = async () => {

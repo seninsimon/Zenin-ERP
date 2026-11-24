@@ -6,7 +6,7 @@ import { forgetMailSettings } from "../src/mail/settings.js";
 import { query } from "../src/db/pool.js";
 import { login, unique } from "./helpers.js";
 
-// workspace/EMAIL_PLAN.md (tests use an in-memory mailbox: nothing is sent)
+// Email (tests use an in-memory mailbox: nothing is sent)
 describe("Email", async () => {
   const admin = await login();
   const mailTo = (address: string) => memoryMailbox.filter((m) => m.to === address);

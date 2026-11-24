@@ -19,7 +19,7 @@ export const DEFAULT_MODELS: Record<Provider, string> = {
 };
 
 // The AI features an admin switches on and off. A switch appears once its
-// feature exists. workspace/AI_FEATURES_PLAN.md
+// feature exists.
 export const FEATURES = ["draftApps", "askZenin"] as const;
 export type Feature = (typeof FEATURES)[number];
 const FEATURE_DEFAULTS: Record<Feature, boolean> = { draftApps: true, askZenin: false };

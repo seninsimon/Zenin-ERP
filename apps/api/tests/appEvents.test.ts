@@ -3,7 +3,7 @@ import { memoryMailbox } from "../src/mail/mailer.js";
 import { processOutbox } from "../src/mail/outbox.js";
 import { login, unique } from "./helpers.js";
 
-// workspace/EMAIL_PLAN.md §1: the events apps now tell people about (bell + email)
+// The events apps now tell people about (bell + email)
 describe("App events that reach people", async () => {
   const admin = await login();
   const remove = async () => {

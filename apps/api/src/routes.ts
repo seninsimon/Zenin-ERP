@@ -84,7 +84,7 @@ r.delete("/schema/:table/automations/:id", adminOnly, handle(notifications.delet
 r.get("/notifications", requireAuth, handle(notifications.listNotificationsHandler));
 r.post("/notifications/read", requireAuth, handle(notifications.readNotificationsHandler));
 
-// team chat (workspace/CHAT_PLAN.md)
+// team chat
 r.get("/chat", requireAuth, handle(chat.chatOverview));
 r.get("/chat/settings", adminOnly, handle(chat.getChatSettingsHandler));
 r.put("/chat/settings", adminOnly, handle(chat.saveChatSettingsHandler));

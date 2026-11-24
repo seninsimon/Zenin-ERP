@@ -8,16 +8,14 @@ automations without code. Built by one founder in Thrissur, Kerala.
   Migrations in `apps/api/migrations`, tests in `apps/api/tests` (vitest).
 - `apps/web`: React + Mantine + TanStack Query + Vite.
   UI rules: `apps/web/UI_GUIDELINES.md` (follow them for every UI change).
-- `docs/`:
-  - WORKFLOW.md: how it works, for developers;
-  - COMMANDS.md;
-  - DEPLOYMENT.md;
-  - RUNNING.md;
-  - APPS_PLAN.md.
+- `docs/` (only two guides; keep it that way):
+  - COMMANDS.md: every command (install, everyday, backups, local dev, tests);
+  - WORKFLOW.md: how it works, for developers.
 - `deploy.sh` / `docker-compose.yml` (Docker project name `generic-erp`).
-- **Plans and business notes:** the private repository
-  `/home/ztark/Desktop/Zenin-ERP-notes`:
-  - ROADMAP.md, PRODUCTION_PLAN.md and the `*_PLAN.md` files;
+- **Plans and business notes:** `workspace/` (gitignored, private, not in
+  any history):
+  - ROADMAP.md, PRODUCTION_PLAN.md and new `*_PLAN.md` files;
+  - OPEN_SOURCE.md;
   - FOUNDER_GUIDE.md, TARGET_MARKETS.md;
   - leads/all_leads.csv.
 
@@ -28,7 +26,7 @@ automations without code. Built by one founder in Thrissur, Kerala.
   design calls yourself and cut confusing options. Say why briefly.
 - **Settings an admin may change belong in Administration screens,** never
   in `.env` edits.
-- **Bigger features:** write a short plan in Zenin-ERP-notes first and get
+- **Bigger features:** write a short plan in `workspace/` first and get
   approval. Keep each plan's status and decision log up to date.
 - **When asked "what do you think?",** give a clear recommendation, then
   build once they say so.
@@ -76,7 +74,9 @@ automations without code. Built by one founder in Thrissur, Kerala.
     no console errors.
   - **Afterwards:** stop the servers and drop the database.
 - **Docs:** update WORKFLOW.md (how it works), COMMANDS.md (anything an admin
-  runs or sets) and UI_GUIDELINES.md (UI patterns) with each change.
+  runs or sets) and UI_GUIDELINES.md (UI patterns) with each change. Don't
+  add new doc files; when a plan is finished, its "how it works" goes into
+  WORKFLOW.md and the plan is deleted.
 
 ## Good to know
 - **Live updates:**

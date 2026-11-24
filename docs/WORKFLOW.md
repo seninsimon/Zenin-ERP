@@ -1,14 +1,14 @@
 # How ERP - Zenin works, and how to work on it
 
 This guide explains how the system behaves end to end, and the workflow for
-changing it. For setup and commands, see [RUNNING.md](RUNNING.md). For the
-architecture and scalability notes, see [README.md](../README.md).
+changing it. For setup and commands, see [COMMANDS.md](COMMANDS.md). For the
+architecture and data model, see [README.md](../README.md).
 
 - [1. The big picture](#1-the-big-picture)
 - [2. Admin workflow: setting up access](#2-admin-workflow-setting-up-access)
 - [3. What happens on a request](#3-what-happens-on-a-request)
 - [4. Records: validation, departments, files](#4-records-validation-departments-files)
-- [5. Apps](#5-apps-settings--apps)
+- [5. Apps](#5-apps-administration--manage-apps)
 - [6. Background jobs: CSV import and export](#6-background-jobs-csv-import-and-export)
 - [7. Audit log](#7-audit-log)
 - [8. Development workflow](#8-development-workflow)

@@ -13,7 +13,7 @@ import { activeAi, getAiSettings } from "./settings.js";
 import { checkLimits } from "./usage.js";
 import { brandName } from "../branding.js";
 
-// Ask Zenin (workspace/AI_FEATURES_PLAN.md, Part 3): questions about the ERP's
+// Ask Zenin (docs/WORKFLOW.md): questions about the ERP's
 // data, answered by the AI chosen in Administration → AI. Read-only. The AI
 // searches with the asking person's permissions, through the same code as
 // the record lists, so it can only see what they can see. Conversations

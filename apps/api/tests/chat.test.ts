@@ -3,7 +3,7 @@ import { memoryMailbox } from "../src/mail/mailer.js";
 import { processOutbox } from "../src/mail/outbox.js";
 import { login, unique } from "./helpers.js";
 
-// workspace/CHAT_PLAN.md: comments on records, and team chat.
+// Comments on records, and team chat.
 describe("Comments and team chat", async () => {
   const admin = await login();
   const dept = async (name: string) => (await admin.post("/api/departments", { name: unique(name) })).body.department;

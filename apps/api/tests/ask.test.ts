@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { login, unique } from "./helpers.js";
 
-// Ask Zenin (workspace/AI_FEATURES_PLAN.md, Part 3). The AI providers are never
+// Ask Zenin (docs/WORKFLOW.md). The AI providers are never
 // really called: fetch is replaced with scripted answers, one per round.
 type Call = { url: string; body: Record<string, unknown> };
 const calls: Call[] = [];

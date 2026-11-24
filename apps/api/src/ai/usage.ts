@@ -7,7 +7,7 @@ import { getAiSettings, type Provider } from "./settings.js";
 
 // Usage of the AI features: one ai_usage row per request (never what was
 // asked), the limits checked before a request, and a bell for the admins at
-// 80% of the monthly limit. workspace/AI_FEATURES_PLAN.md
+// 80% of the monthly limit.
 
 export type Who = { _id: string; isAdmin: boolean } | null; // null: the system
 

@@ -128,7 +128,7 @@ services:
 
   # optional: public HTTPS access from anywhere through a Cloudflare Tunnel
   # (no router changes). Turned on by "./deploy.sh public", which sets
-  # COMPOSE_PROFILES=tunnel and CLOUDFLARE_TUNNEL_TOKEN in .env. See DEPLOYMENT.md.
+  # COMPOSE_PROFILES=tunnel and CLOUDFLARE_TUNNEL_TOKEN in .env. See docs/COMMANDS.md.
   tunnel:
     image: cloudflare/cloudflared:2026.10.3
     profiles: ["tunnel"]

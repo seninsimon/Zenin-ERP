@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
+import { launcherApp } from "../apps/index.js";
 import { allowedDepartments, can, isAdmin, tablePermissions } from "../auth/access.js";
+import { ownFieldsFor } from "../auth/ownership.js";
 import { HttpError, param, toIdList } from "../lib/http.js";
 import { currentUser } from "../middleware/auth.js";
 import { audit } from "../repo/auditRepo.js";
@@ -17,12 +19,16 @@ import {
   updateColumn,
   updateTableSettings,
 } from "../schema/schemaRepo.js";
+import { tryFormula } from "../schema/formula.js";
+import { assertNotUsedByRollups } from "../schema/rollups.js";
 import { deleteUploads } from "../storage.js";
 import type { CurrentUser, TableSchema } from "../types.js";
 
-// What the current user may do with a table, added to the schema.
+// What the current user may do with a table, added to the schema, and the
+// app it belongs to in the launcher and sidebar ("Company", "Projects"; null = your own).
 const withAccess = (user: CurrentUser, schema: TableSchema) => ({
   ...schema,
+  app: launcherApp(schema.appKey),
   permissions: tablePermissions(user, schema),
   allowedDepartments: allowedDepartments(user, schema),
 });
@@ -47,6 +53,9 @@ export async function getTableSchema(req: Request, res: Response) {
 
   const result: Record<string, unknown> = withAccess(user, schema);
   if (isAdmin(user)) result.unassignedCount = await countUnassigned(schema.tableName);
+  // "own only": the fields that make a record theirs, locked to them in the form
+  const own = await ownFieldsFor(schema, user);
+  if (own.length) result.ownFields = own;
   res.json(result);
 }
 
@@ -61,6 +70,8 @@ export async function createTableHandler(req: Request, res: Response) {
 export async function deleteTableHandler(req: Request, res: Response) {
   const schema = await requireTable(param(req, "table"));
 
+  // totals elsewhere can't lose the records they add up
+  await assertNotUsedByRollups(schema.tableName);
   // don't leave relation columns in other tables pointing at nothing
   const references = await findRelationsTo(schema.tableName);
   if (references.length) {
@@ -76,7 +87,7 @@ export async function deleteTableHandler(req: Request, res: Response) {
   res.json({ message: `Table "${schema.tableName}" deleted`, deletedFiles: fileUrls.length });
 }
 
-// PUT /schema/:table { showInMenu?, departmentIds? }
+// PUT /schema/:table { showInMenu?, byDepartment?, departmentIds? }
 export async function updateTableSettingsHandler(req: Request, res: Response) {
   const tableName = param(req, "table");
   let departmentIds: string[] | undefined;
@@ -86,12 +97,20 @@ export async function updateTableSettingsHandler(req: Request, res: Response) {
       throw new HttpError(400, "Unknown department selected");
     }
   }
-  const schema = await updateTableSettings(tableName, { showInMenu: req.body?.showInMenu, departmentIds });
+  const schema = await updateTableSettings(tableName, {
+    showInMenu: req.body?.showInMenu,
+    byDepartment: req.body?.byDepartment,
+    departmentIds,
+  });
   await audit(req, {
     action: "settings",
     entity: "table",
     tableName,
-    changes: { showInMenu: schema.showInMenu, departments: schema.departments.map((d) => d.name) },
+    changes: {
+      showInMenu: schema.showInMenu,
+      recordsSeenBy: schema.byDepartment ? "each department" : "everyone with access",
+      departments: schema.departments.map((d) => d.name),
+    },
   });
 
   // A table shared with one department never keeps "admins only" records:
@@ -140,14 +159,20 @@ export async function addColumnHandler(req: Request, res: Response) {
 
 export async function updateColumnHandler(req: Request, res: Response) {
   const tableName = param(req, "table");
-  const { before, after } = await updateColumn(tableName, param(req, "name"), req.body ?? {});
-  const changes = Object.fromEntries(
-    (["label", "type", "showInTable", "required", "indexed"] as const)
-      .filter((k) => before[k] !== after[k])
+  const { before, after, rewritten } = await updateColumn(tableName, param(req, "name"), req.body ?? {});
+  const changes: Record<string, unknown> = Object.fromEntries(
+    (["label", "type", "showInTable", "required", "indexed", "default"] as const)
+      .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
       .map((k) => [k, { from: before[k], to: after[k] }])
   );
+  const labels = (c: typeof before) => (c.options ?? []).map((o) => o.label);
+  if (JSON.stringify(labels(before)) !== JSON.stringify(labels(after))) {
+    changes.options = { from: labels(before), to: labels(after) };
+  }
+  if (rewritten) changes.recordsUpdated = { to: rewritten };
   await audit(req, { action: "update", entity: "column", tableName, recordId: after.name, changes });
-  res.json({ message: "Column updated successfully", data: after });
+  // rewritten: records whose value was updated (renamed option, text -> choice)
+  res.json({ message: "Column updated successfully", data: after, rewritten });
 }
 
 export async function deleteColumnHandler(req: Request, res: Response) {
@@ -155,4 +180,13 @@ export async function deleteColumnHandler(req: Request, res: Response) {
   const { removed } = await deleteColumn(tableName, param(req, "column"));
   await audit(req, { action: "delete", entity: "column", tableName, recordId: removed.name, changes: { type: removed.type } });
   res.json({ message: "Column removed" });
+}
+
+// POST /schema/:table/formula/check { expression, column? }: is the formula
+// valid, what kind of value does it give, and what is it on the latest record?
+export async function checkFormulaHandler(req: Request, res: Response) {
+  const schema = await requireTable(param(req, "table"));
+  const { expression, column } = (req.body ?? {}) as { expression?: unknown; column?: unknown };
+  if (typeof expression !== "string" || !expression.trim()) throw new HttpError(400, "Enter a formula");
+  res.json(await tryFormula(schema, expression, typeof column === "string" ? column : undefined));
 }

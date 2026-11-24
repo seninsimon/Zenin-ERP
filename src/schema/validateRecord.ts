@@ -1,4 +1,5 @@
 import { can, recordScope, isAdmin } from "../auth/access.js";
+import { ownLinkIds } from "../auth/ownership.js";
 import { getRecordsByIds } from "../repo/recordRepo.js";
 import { existingDepartmentIds, getUserOptionsByIds } from "../repo/userRepo.js";
 import { UPLOAD_URL_PREFIX } from "../storage.js";
@@ -52,12 +53,12 @@ function coerce(column: Column, value: unknown): unknown {
       if (typeof value === "boolean") return value;
       if (value === "true" || value === "false") return value === "true";
       if (value === "") return null;
-      throw "must be true or false";
+      throw "must be yes or no";
     }
     case "date": {
       if (value === "") return null;
       if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(value) || Number.isNaN(Date.parse(value))) {
-        throw "must be a date (YYYY-MM-DD)";
+        throw "must be a date, written like 2026-12-31";
       }
       return value;
     }
@@ -73,6 +74,29 @@ function coerce(column: Column, value: unknown): unknown {
       if (value === "") return null;
       if (typeof value !== "string") throw `must be a ${what} id`;
       return value;
+    }
+    case "autonumber": {
+      // normally given by the server; a value can come from an import
+      if (typeof value === "number") value = String(value);
+      if (typeof value !== "string") throw "must be text";
+      if (value.length > 100) throw "is too long";
+      return value.trim() || null;
+    }
+    case "choice": {
+      // matched to an option's exact label ignoring case/spaces; whether it
+      // is an option at all is checked in checkChoices
+      const canonical = (v: unknown) => {
+        if (typeof v === "number") v = String(v);
+        if (typeof v !== "string") throw "must be one of its options";
+        const trimmed = v.trim();
+        return column.options?.find((o) => o.label.toLowerCase() === trimmed.toLowerCase())?.label ?? trimmed;
+      };
+      if (column.multiple) {
+        const list = Array.isArray(value) ? value : value === "" ? [] : [value];
+        return [...new Set(list.map(canonical).filter(Boolean))];
+      }
+      const one = canonical(value);
+      return one === "" ? null : one;
     }
     case "image":
     case "file": {
@@ -97,6 +121,7 @@ export function coerceValues(schema: TableSchema, payload: Record<string, unknow
   const errors: Errors = {};
   for (const column of schema.columns) {
     if (!(column.name in payload)) continue;
+    if (column.type === "formula") continue; // worked out by the server
     try {
       values[column.name] = coerce(column, payload[column.name]);
     } catch (message) {
@@ -104,6 +129,42 @@ export function coerceValues(schema: TableSchema, payload: Record<string, unknow
     }
   }
   return { values, errors };
+}
+
+// Choice values must be one of the column's options. Values the record
+// already had are fine (an option removed later stays on old records until
+// someone changes that field).
+export function checkChoices(
+  schema: TableSchema,
+  values: RecordData,
+  previous: RecordData = {},
+  // who's choosing: options limited to some roles ("Approved") need one of them
+  user?: CurrentUser
+): Errors {
+  const errors: Errors = {};
+  for (const column of schema.columns) {
+    if (column.type !== "choice" || !(column.name in values)) continue;
+    if (user && !user.role.isAdmin) {
+      const before = new Set(([] as unknown[]).concat(previous[column.name] ?? []));
+      const chosen = ([] as unknown[]).concat(values[column.name] ?? []).filter((v) => !before.has(v));
+      const locked = (column.options ?? []).find((o) => o.roles?.length && chosen.includes(o.label) && !o.roles.some((id) => user.roleIds.includes(id)));
+      if (locked) {
+        errors[column.name] = `Only some roles can set ${column.label || column.name} to "${locked.label}" (it's an approval step)`;
+        continue;
+      }
+    }
+    const allowed = new Set([
+      ...(column.options ?? []).map((o) => o.label),
+      ...([] as unknown[]).concat(previous[column.name] ?? []).filter((v): v is string => typeof v === "string"),
+    ]);
+    const bad = ([] as unknown[]).concat(values[column.name] ?? []).find((v) => typeof v === "string" && !allowed.has(v));
+    if (bad !== undefined) {
+      const options = (column.options ?? []).map((o) => o.label);
+      const list = options.length <= 8 ? `: ${options.join(", ")}` : "";
+      errors[column.name] = `"${String(bad)}" is not an option for ${column.label || column.name}${list ? ` (choose${list})` : ""}`;
+    }
+  }
+  return errors;
 }
 
 // Required fields must be filled in the final (merged) record.
@@ -157,6 +218,9 @@ export async function checkRelations(
       continue;
     }
     if (!isAdmin(user) && !can(user, refSchema, "view")) {
+      // your own entry (your People directory record) needs no access to its table
+      const own = await ownLinkIds(schema, column.name, user);
+      if (ids.every((id) => own.has(id))) continue;
       errors[column.name] = `${label}: you don't have access to "${refSchema.tableName}"`;
       continue;
     }

@@ -1,6 +1,7 @@
 import { quoteLiteral } from "../db/pool.js";
 import { HttpError } from "../lib/http.js";
 import type { Column, TableSchema } from "../types.js";
+import { ME, MINE, valueType } from "./columns.js";
 
 // Column filters for record lists and exports.
 //
@@ -25,6 +26,7 @@ export type FilterOp =
   | "before"
   | "after"
   | "in"
+  | "notIn"
   | "isTrue"
   | "isFalse"
   | "isEmpty"
@@ -45,12 +47,12 @@ type Kind =
   | "relation"
   | "user"
   | "departmentColumn"
+  | "choice"
   | "file"
   | "department"
   | "createdBy";
 
-export const ME = "$me";
-export const MINE = "$mine";
+export { ME, MINE };
 
 // who is looking at the list (for "$me" / "$mine")
 type Viewer = { _id: string; departments: { _id: string }[] } | null;
@@ -63,13 +65,15 @@ const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
   relation: ["in", "isEmpty", "isNotEmpty"],
   user: ["in", "isEmpty", "isNotEmpty"],
   departmentColumn: ["in", "isEmpty", "isNotEmpty"],
+  choice: ["in", "notIn", "isEmpty", "isNotEmpty"],
   file: ["isEmpty", "isNotEmpty"],
   department: ["in", "isEmpty"],
   createdBy: ["in", "isEmpty", "isNotEmpty"],
 };
 
 const kindOf = (column: Column): Kind => {
-  switch (column.type) {
+  // a formula filters like its result: number, date, yes/no or text
+  switch (valueType(column)) {
     case "number":
       return "number";
     case "date":
@@ -82,6 +86,8 @@ const kindOf = (column: Column): Kind => {
       return "user";
     case "department":
       return "departmentColumn";
+    case "choice":
+      return "choice";
     case "image":
     case "images":
     case "file":
@@ -93,7 +99,29 @@ const kindOf = (column: Column): Kind => {
 };
 
 const MAX_FILTERS = 20;
-const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+// "$today" stands for the current date, so a saved "Overdue" view keeps working;
+// "$today+1" is tomorrow, "$today+30" a month ahead, "$today-7" a week ago
+export const TODAY_TOKEN = "$today";
+const RELATIVE = /^\$today(?:([+-])(\d{1,3}))?$/;
+const isDate = (v: unknown): v is string => typeof v === "string" && (/^\d{4}-\d{2}-\d{2}$/.test(v) || RELATIVE.test(v));
+// "2026-12-08" + days
+export const addDays = (iso: string, days: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+// a "$today…" token as a date; `today`: the date that counts as today (the
+// morning summary passes the date in the organization's time zone)
+export const resolveDateToken = (v: unknown, today = todayIso()) => {
+  const m = typeof v === "string" ? RELATIVE.exec(v) : null;
+  if (!m) return v;
+  return m[1] ? addDays(today, (m[1] === "-" ? -1 : 1) * Number(m[2])) : today;
+};
+const dateValue = (v: unknown) => resolveDateToken(v);
 const isNumber = (v: unknown) => v !== "" && v !== null && Number.isFinite(Number(v));
 
 // Parse and validate the ?filters= query value against the table's columns.
@@ -137,8 +165,11 @@ export function parseFilters(raw: unknown, schema: TableSchema, viewer: Viewer =
         throw new HttpError(400, `Filter on "${f.field}" needs a date (YYYY-MM-DD)`);
       }
     }
-    if (f.op === "in" && (!Array.isArray(f.value) || !f.value.length || !f.value.every((v) => typeof v === "string"))) {
-      throw new HttpError(400, `Filter on "${f.field}" needs a list of ids`);
+    if (
+      (f.op === "in" || f.op === "notIn") &&
+      (!Array.isArray(f.value) || !f.value.length || !f.value.every((v) => typeof v === "string"))
+    ) {
+      throw new HttpError(400, `Filter on "${f.field}" needs a list of values`);
     }
     let value = f.value;
     if (f.op === "in" && viewer) {
@@ -162,7 +193,10 @@ export function filterConditions(schema: TableSchema, filters: RecordFilter[], p
 
   return filters.map((f) => {
     if (f.field === "_department") {
-      return f.op === "isEmpty" ? "t.department_id IS NULL" : `t.department_id = ANY(${p(f.value)}::text[])`;
+      if (f.op === "isEmpty") return "t.department_id IS NULL";
+      const ids = `${p(f.value)}::text[]`;
+      // visible to any of them: as the first department or a shared one
+      return `(t.department_id = ANY(${ids}) OR t.shared_department_ids && ${ids})`;
     }
     if (f.field === "_createdBy") {
       if (f.op === "isEmpty") return "t.created_by IS NULL";
@@ -194,18 +228,22 @@ export function filterConditions(schema: TableSchema, filters: RecordFilter[], p
       }
       case "date": {
         const day = `left(${text}, 10)`;
-        if (f.op === "eq") return `${day} = ${p(f.value)}`;
-        if (f.op === "before") return `${day} < ${p(f.value)}`;
-        if (f.op === "after") return `${day} > ${p(f.value)}`;
-        return `${day} BETWEEN ${p(f.value)} AND ${p(f.value2)}`; // between
+        if (f.op === "eq") return `${day} = ${p(dateValue(f.value))}`;
+        if (f.op === "before") return `${day} < ${p(dateValue(f.value))}`;
+        if (f.op === "after") return `${day} > ${p(dateValue(f.value))}`;
+        return `${day} BETWEEN ${p(dateValue(f.value))} AND ${p(dateValue(f.value2))}`; // between
       }
       case "boolean":
         return f.op === "isTrue" ? `${json} = 'true'::jsonb` : `${json} = 'false'::jsonb`;
       case "relation":
       case "user":
-      case "departmentColumn": {
-        const ids = p(f.value);
-        return `((jsonb_typeof(${json}) = 'array' AND ${json} ?| ${ids}::text[]) OR ${text} = ANY(${ids}::text[]))`;
+      case "departmentColumn":
+      case "choice": {
+        // `?|` matches a single id/label or one inside a list (and uses the
+        // link columns' GIN index)
+        const match = `${json} ?| ${p(f.value)}::text[]`;
+        // "is not": also records with no value
+        return f.op === "notIn" ? `NOT COALESCE(${match}, FALSE)` : match;
       }
       default:
         return "TRUE";

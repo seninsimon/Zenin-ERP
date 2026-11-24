@@ -9,7 +9,7 @@ import { parseFilters } from "../schema/filters.js";
 import { getSchema } from "../schema/schemaRepo.js";
 import { storage } from "../storage.js";
 import type { CurrentUser, StoredRecord, TableSchema } from "../types.js";
-import { CREATED_BY_HEADER, DEPARTMENT_HEADER, formatCell } from "./csv.js";
+import { CREATED_BY_HEADER, DEPARTMENT_HEADER, formatCell, ID_HEADER } from "./csv.js";
 
 // Look up display labels for the relation values in one batch, limited to the
 // records the user could see themselves.
@@ -49,11 +49,19 @@ export async function runExport(job: Job) {
   if (!can(user, schema, "view")) throw new Error("You no longer have access to this table");
 
   // "Visible to" only when the table is shared with several departments (as in the list)
-  const withDepartment = schema.departments.length > 1;
+  const withDepartment = schema.byDepartment && schema.departments.length > 1;
+  // "Engineering; Design": the record's first department, then the shared ones
+  const names = new Map(schema.departments.map((d) => [d._id, d.name]));
+  const visibleTo = (r: { departmentId: string | null; sharedDepartmentIds: string[]; departmentName?: string | null }) =>
+    [r.departmentId ? (r.departmentName ?? names.get(r.departmentId) ?? "") : "", ...r.sharedDepartmentIds.map((id) => names.get(id) ?? "")]
+      .filter(Boolean)
+      .join("; ");
   const header = [
     ...schema.columns.map((c) => c.label || c.name),
     ...(withDepartment ? [DEPARTMENT_HEADER] : []),
     CREATED_BY_HEADER,
+    // keep it to change these records by importing the file again
+    ID_HEADER,
   ];
   const departments = schema.columns.some((c) => c.type === "department") ? await departmentNames() : new Map<string, string>();
   // BOM so Excel opens UTF-8 correctly
@@ -88,8 +96,9 @@ export async function runExport(job: Job) {
               c.type === "user" ? people.map : c.type === "department" ? departments : labels.get(c.name)
             )
           ),
-          ...(withDepartment ? [record.departmentName ?? ""] : []),
+          ...(withDepartment ? [visibleTo(record)] : []),
           people.label(record.createdBy),
+          record._id,
         ]);
       }
       rows += batch.length;

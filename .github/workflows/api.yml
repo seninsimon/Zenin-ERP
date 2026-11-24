@@ -1,9 +1,15 @@
-name: CI
+name: API
 
 on:
   push:
     branches: [main, development]
+    paths: ["apps/api/**", ".github/workflows/api.yml"]
   pull_request:
+    paths: ["apps/api/**", ".github/workflows/api.yml"]
+
+defaults:
+  run:
+    working-directory: apps/api
 
 jobs:
   test:
@@ -36,6 +42,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: apps/api/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
@@ -46,4 +53,4 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t generic-erp-api .
+      - run: docker build -t zenvo-api .

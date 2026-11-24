@@ -1,0 +1,234 @@
+# Zenin ERP: tasks for running and testing the app locally (https://taskfile.dev)
+#
+#   task              list all tasks
+#   task setup        first time: install dependencies, create .env files
+#   task dev          start everything with hot reload (Ctrl+C stops the API and web app)
+#   task stop         stop the database and storage containers
+#
+# Development uses the same Docker database and storage as the deployed ERP
+# (./deploy.sh) on this computer, so data is shared between the two.
+version: "3"
+
+output: prefixed
+
+vars:
+  # use sudo for docker when this user isn't in the docker group
+  DOCKER:
+    sh: docker info >/dev/null 2>&1 && echo docker || echo "sudo docker"
+  DC: '{{.DOCKER}} compose --project-directory "{{.TASKFILE_DIR}}"'
+  API: "{{.TASKFILE_DIR}}/apps/api"
+  WEB: "{{.TASKFILE_DIR}}/apps/web"
+  # the dev database URL with the database name swapped for the test database
+  TEST_DATABASE_URL:
+    sh: grep '^DATABASE_URL=' "{{.TASKFILE_DIR}}/apps/api/.env" 2>/dev/null | cut -d= -f2- | sed -E 's#/[^/?]+$#/generic_erp_test#'
+
+tasks:
+  default:
+    desc: List all tasks
+    silent: true
+    interactive: true
+    cmds:
+      - task --list --sort none
+
+  # ---------------------------------------------------------------- setup
+
+  setup:
+    desc: "First time: install dependencies and create the local .env files"
+    cmds:
+      - task: env
+      - task: install
+
+  env:
+    internal: true
+    silent: true
+    cmds:
+      - |
+        if [ ! -f "{{.API}}/.env" ]; then
+          cp "{{.API}}/.env.example" "{{.API}}/.env"
+          echo "created apps/api/.env (points at the Docker database and storage)"
+        fi
+      - |
+        if [ ! -f "{{.WEB}}/.env" ]; then
+          printf 'VITE_API_BASE_URL=http://localhost:5000/api\nVITE_FILE_BASE_URL=http://localhost:5000\n' > "{{.WEB}}/.env"
+          echo "created apps/web/.env"
+        fi
+
+  install:
+    desc: Install the API and web app dependencies
+    deps: [install:api, install:web]
+
+  install:api:
+    internal: true
+    dir: "{{.API}}"
+    prefix: api
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  install:web:
+    internal: true
+    dir: "{{.WEB}}"
+    prefix: web
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  # ---------------------------------------------------------------- run
+
+  dev:
+    desc: "Start everything with hot reload: API http://localhost:5000, web app http://localhost:5173"
+    cmds:
+      - task: env
+      - task: infra
+      - task: dev:all
+
+  dev:all:
+    internal: true
+    deps: [dev:api, dev:web]
+
+  dev:api:
+    desc: Run only the API with hot reload (port 5000; also runs background jobs)
+    dir: "{{.API}}"
+    prefix: api
+    cmds:
+      - pnpm dev
+
+  dev:web:
+    desc: Run only the web app with hot reload (http://localhost:5173)
+    dir: "{{.WEB}}"
+    prefix: web
+    cmds:
+      - pnpm dev --port 5173 --strictPort
+
+  infra:
+    desc: Start the database and file storage in Docker and wait until they're healthy
+    prefix: docker
+    cmds:
+      - "{{.DC}} up -d --wait db storage"
+
+  stop:
+    desc: Stop the database and storage (not while the deployed ERP is running)
+    prefix: docker
+    cmds:
+      - |
+        if [ -n "$({{.DC}} ps -q --status running api 2>/dev/null)" ]; then
+          echo "The deployed ERP is running and uses the same database and storage: leaving them on."
+          echo "Stop everything with: ./deploy.sh stop"
+        else
+          {{.DC}} stop db storage
+        fi
+
+  # ---------------------------------------------------------------- data
+
+  seed:
+    desc: "Load the demo company into an empty system (task seed SIZE=small|medium|large)"
+    dir: "{{.API}}"
+    prefix: seed
+    vars:
+      SIZE: '{{.SIZE | default "medium"}}'
+    deps: [infra]
+    cmds:
+      - pnpm seed --size={{.SIZE}}
+
+  reset:
+    desc: Wipe ALL data and uploaded files (asks first)
+    dir: "{{.API}}"
+    prefix: reset
+    prompt: "This deletes ALL data and files in the Docker database (shared with the deployed ERP on this computer). Continue?"
+    deps: [infra]
+    cmds:
+      - pnpm db:reset --yes
+      - echo "Restart the API (task dev) so it forgets its cached tables and sessions."
+
+  fresh:
+    desc: "Wipe everything and load fresh demo data (task fresh SIZE=small)"
+    dir: "{{.API}}"
+    prefix: fresh
+    prompt: "This deletes ALL data and files (shared with the deployed ERP on this computer) and loads the demo company. Continue?"
+    vars:
+      SIZE: '{{.SIZE | default "medium"}}'
+    deps: [infra]
+    cmds:
+      - pnpm db:reset --yes
+      - pnpm seed --size={{.SIZE}}
+      - echo "Restart the API (task dev) so it forgets its cached tables and sessions."
+
+  # ---------------------------------------------------------------- checks
+
+  test:
+    desc: Run the API tests (uses a separate generic_erp_test database)
+    dir: "{{.API}}"
+    prefix: test
+    deps: [infra]
+    preconditions:
+      - sh: test -n "{{.TEST_DATABASE_URL}}"
+        msg: "apps/api/.env has no DATABASE_URL: run task setup"
+    cmds:
+      - |
+        if ! {{.DC}} exec -T db psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'generic_erp_test'" | grep -q 1; then
+          {{.DC}} exec -T db createdb -U postgres generic_erp_test
+          echo "created the generic_erp_test database"
+        fi
+      - TEST_DATABASE_URL='{{.TEST_DATABASE_URL}}' pnpm test
+
+  typecheck:
+    desc: Type-check the API and web app
+    deps: [typecheck:api, typecheck:web]
+
+  typecheck:api:
+    internal: true
+    dir: "{{.API}}"
+    prefix: api
+    cmds:
+      - pnpm typecheck
+
+  typecheck:web:
+    internal: true
+    dir: "{{.WEB}}"
+    prefix: web
+    cmds:
+      - pnpm exec tsc -b
+
+  lint:
+    desc: Lint the web app
+    dir: "{{.WEB}}"
+    prefix: lint
+    cmds:
+      - pnpm lint
+
+  check:
+    desc: "Everything CI checks: type-check, lint and tests"
+    cmds:
+      - task: typecheck
+      - task: lint
+      - task: test
+
+  build:
+    desc: Production build of the API and web app (output in dist/)
+    deps: [build:api, build:web]
+
+  build:api:
+    internal: true
+    dir: "{{.API}}"
+    prefix: api
+    cmds:
+      - pnpm build
+
+  build:web:
+    internal: true
+    dir: "{{.WEB}}"
+    prefix: web
+    cmds:
+      - pnpm build
+
+  # ---------------------------------------------------------------- deployed ERP (./deploy.sh)
+
+  deploy:
+    desc: Install or update the always-on deployed ERP (see DEPLOYMENT.md)
+    interactive: true
+    cmds:
+      - ./deploy.sh
+
+  status:
+    desc: Status of the deployed ERP (services, address, backups, disk)
+    interactive: true
+    cmds:
+      - ./deploy.sh status

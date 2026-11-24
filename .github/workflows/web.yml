@@ -1,8 +1,14 @@
-name: CI
+name: Web
 
 on:
   push:
+    paths: ["apps/web/**", ".github/workflows/web.yml"]
   pull_request:
+    paths: ["apps/web/**", ".github/workflows/web.yml"]
+
+defaults:
+  run:
+    working-directory: apps/web
 
 jobs:
   build:
@@ -18,6 +24,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 

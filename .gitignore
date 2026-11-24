@@ -1,0 +1,12 @@
+# settings and secrets: never committed (each app also ignores its own .env)
+.env
+.env.*
+!.env.example
+# local data
+backups/
+# dependencies and build output
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store

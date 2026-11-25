@@ -25,6 +25,7 @@ import { FormulaEditor } from "./FormulaEditor";
 import { RollupEditor } from "./RollupEditor";
 import { columnTypeInfo, columnTypes, INDEXABLE_TYPES, INDEXED_HELP, optionsError, slugify } from "./columnTypes";
 import classes from "./settings.module.css";
+import { WithHelp } from "../../components/ui/HelpTip";
 
 export type SchemaColumn = {
   _id?: string;
@@ -365,7 +366,7 @@ export function ColumnModal({
           {form.values.type === "relation" && !editing && (
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
               <Select
-                label="Links to table"
+                label={<WithHelp topic="relation">Links to table</WithHelp>}
                 placeholder="Choose a table"
                 data={tableOptions}
                 searchable

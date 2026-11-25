@@ -268,7 +268,8 @@ describe("Installing apps", async () => {
     expect(appOf("employees")).toMatchObject({ key: "company", name: "Company", icon: "IconBuildingSkyscraper" });
     const own = unique("own");
     await admin.post("/api/schema", { tableName: own, columns: [{ name: "name", label: "Name" }] }).expect(200);
-    expect((await admin.get(`/api/schema/${own}`)).body.app).toBeNull(); // your own tables: "My tables"
+    // your own tables are in "My tables", an app like any other
+    expect((await admin.get(`/api/schema/${own}`)).body.app).toMatchObject({ key: "my-tables", name: "My tables", icon: "IconTable" });
     await admin.del(`/api/schema/${own}`).expect(200);
     // each app's counts go on its app page
     const boards = (await admin.get("/api/apps/dashboards")).body as { app: string; launcher: string }[];

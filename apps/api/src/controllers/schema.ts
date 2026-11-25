@@ -20,6 +20,8 @@ import {
   updateTableSettings,
 } from "../schema/schemaRepo.js";
 import { tryFormula } from "../schema/formula.js";
+import { tableAccess } from "../auth/accessSummary.js";
+import { isStaffChoice, moveTable, MY_TABLES, placeNewTable, requireHome } from "../apps/ownApps.js";
 import { assertNotUsedByRollups } from "../schema/rollups.js";
 import { deleteUploads } from "../storage.js";
 import type { CurrentUser, TableSchema } from "../types.js";
@@ -61,10 +63,25 @@ export async function getTableSchema(req: Request, res: Response) {
 
 /* ---------------- admin: tables ---------------- */
 
+// POST /schema { tableName, columns?, app?, staff? }: a new table goes into an
+// app (My tables when none is given). Its Manager gets everything; its Staff
+// what was chosen: none (the default), view or work (view, add and edit).
 export async function createTableHandler(req: Request, res: Response) {
+  const { app, staff } = (req.body ?? {}) as { app?: unknown; staff?: unknown };
+  if (staff !== undefined && !isStaffChoice(staff)) throw new HttpError(400, "Choose what Staff can do: none, view or work");
+  await requireHome(app); // before anything is created
   const schema = await createTable(req.body ?? {});
-  await audit(req, { action: "create", entity: "table", tableName: schema.tableName });
-  res.json({ message: "Table created", data: schema });
+  const home = await placeNewTable(schema.tableName, app, staff);
+  await audit(req, { action: "create", entity: "table", tableName: schema.tableName, changes: { app: home.name, staff: staff ?? "none" } });
+  res.json({ message: "Table created", data: { ...schema, appKey: home.key === MY_TABLES ? null : home.key } });
+}
+
+// PUT /schema/:table/app { app }: move a table you made to another app
+export async function moveTableHandler(req: Request, res: Response) {
+  const tableName = param(req, "table");
+  const { home, moved } = await moveTable(tableName, req.body?.app);
+  if (moved) await audit(req, { action: "settings", entity: "table", tableName, changes: { app: home.name } });
+  res.json({ message: moved ? `Moved to ${home.name}` : "Already there", app: home });
 }
 
 export async function deleteTableHandler(req: Request, res: Response) {
@@ -95,6 +112,17 @@ export async function updateTableSettingsHandler(req: Request, res: Response) {
     departmentIds = toIdList(req.body.departmentIds);
     if ((await existingDepartmentIds(departmentIds)).length !== departmentIds.length) {
       throw new HttpError(400, "Unknown department selected");
+    }
+  }
+  // "Split by department" with no department would hide the table from
+  // everyone but admins without anyone meaning to: refuse it. (Only checked
+  // when one of the two changes, so old tables can still be renamed etc.)
+  if (req.body?.byDepartment !== undefined || departmentIds !== undefined) {
+    const current = await requireTable(tableName);
+    const split = typeof req.body?.byDepartment === "boolean" ? req.body.byDepartment : current.byDepartment;
+    const count = departmentIds?.length ?? current.departments.length;
+    if (split && count === 0) {
+      throw new HttpError(400, "Choose at least one department, or let everyone with access see the records");
     }
   }
   const schema = await updateTableSettings(tableName, {
@@ -189,4 +217,9 @@ export async function checkFormulaHandler(req: Request, res: Response) {
   const { expression, column } = (req.body ?? {}) as { expression?: unknown; column?: unknown };
   if (typeof expression !== "string" || !expression.trim()) throw new HttpError(400, "Enter a formula");
   res.json(await tryFormula(schema, expression, typeof column === "string" ? column : undefined));
+}
+
+// GET /schema/:table/access: every role that opens this table, for admins
+export async function getTableAccessHandler(req: Request, res: Response) {
+  res.json(await tableAccess(await requireTable(param(req, "table"))));
 }

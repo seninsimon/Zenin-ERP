@@ -287,6 +287,7 @@ export function AutomationsSection({ table, columns }: { table: string; columns:
   return (
     <Section
       title="Automations"
+      help="automations"
       description="Things that happen by themselves when records change, like telling someone their leave was approved."
       actions={
         <Button variant="default" leftSection={<IconPlus size={16} />} onClick={() => setModal({ editing: null })}>

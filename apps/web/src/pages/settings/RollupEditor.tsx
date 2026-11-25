@@ -10,6 +10,7 @@ import {
   type TableSchemaInfo,
 } from "../../features/records/schema";
 import { tableTitle } from "../../layout/nav";
+import { WithHelp } from "../../components/ui/HelpTip";
 
 const FNS = [
   { value: "count", label: "Count them" },
@@ -68,7 +69,7 @@ export function RollupEditor({
   return (
     <Stack gap="sm">
       <Select
-        label="Total of"
+        label={<WithHelp topic="rollup">Total of</WithHelp>}
         description="Records in another table that link to this one"
         placeholder="Choose the linked records"
         data={options}

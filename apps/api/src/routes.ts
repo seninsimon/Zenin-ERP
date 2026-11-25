@@ -53,6 +53,7 @@ r.post("/users", adminOnly, handle(admin.createUserHandler));
 r.put("/users/:id", adminOnly, handle(admin.updateUserHandler));
 r.delete("/users/:id", adminOnly, handle(admin.deleteUserHandler));
 r.post("/users/:id/password-link", adminOnly, handle(admin.sendPasswordLinkHandler));
+r.get("/users/:id/access", adminOnly, handle(admin.getUserAccessHandler));
 
 r.get("/roles", adminOnly, handle(admin.getRoles));
 r.post("/roles", adminOnly, handle(admin.createRoleHandler));
@@ -71,6 +72,8 @@ r.post("/schema", adminOnly, handle(schema.createTableHandler));
 r.put("/schema/:table", adminOnly, handle(schema.updateTableSettingsHandler));
 r.delete("/schema/:table", adminOnly, handle(schema.deleteTableHandler));
 r.put("/schema/:table/unassigned", adminOnly, handle(schema.assignUnassignedHandler));
+r.get("/schema/:table/access", adminOnly, handle(schema.getTableAccessHandler));
+r.put("/schema/:table/app", adminOnly, handle(schema.moveTableHandler));
 r.post("/schema/:table/column", adminOnly, handle(schema.addColumnHandler));
 r.put("/schema/:table/column/:name", adminOnly, handle(schema.updateColumnHandler));
 r.delete("/schema/:table/column/:column", adminOnly, handle(schema.deleteColumnHandler));
@@ -119,6 +122,10 @@ r.get("/apps/dashboards", requireAuth, handle(apps.dashboardsHandler));
 r.post("/apps/plan", adminOnly, handle(apps.planHandler));
 r.post("/apps/draft", adminOnly, handle(apps.draftHandler));
 r.post("/apps/install", adminOnly, handle(apps.installHandler));
+// apps you make yourself; where a table can go
+r.get("/apps/homes", adminOnly, handle(apps.homesHandler));
+r.post("/apps/own", adminOnly, handle(apps.createOwnAppHandler));
+r.put("/apps/:key", adminOnly, handle(apps.renameAppHandler));
 r.delete("/apps/:key", adminOnly, handle(apps.uninstallHandler));
 r.delete("/apps/:key/sample", adminOnly, handle(apps.removeSampleHandler));
 

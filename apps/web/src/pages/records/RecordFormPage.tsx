@@ -34,6 +34,7 @@ import { useAppCrumb } from "../../features/apps/appMenu";
 import { LiveChangeBar } from "../../features/live/LiveChangeBar";
 import { useLiveChanges } from "../../features/live/live";
 import { modals } from "@mantine/modals";
+import { WithHelp } from "../../components/ui/HelpTip";
 
 type Values = Record<string, unknown>;
 type Snapshot = { values: Values; departmentIds: string[]; files: Record<string, string[]> };
@@ -375,7 +376,7 @@ export default function RecordFormPage() {
                       <Grid.Col span={{ base: 12, md: 6 }}>
                         <MultiSelect
                           id="field-_departmentId"
-                          label="Visible to"
+                          label={<WithHelp topic="visibleTo">Visible to</WithHelp>}
                           description="Which departments can see this record"
                           placeholder={departmentIds.length ? undefined : "Choose departments"}
                           data={departmentOptions}

@@ -7,6 +7,7 @@ import { can, isAdmin } from "../auth/access.js";
 import { getAllSchemas } from "../schema/schemaRepo.js";
 import type { TableSchema } from "../types.js";
 import { install, listInstalled, plan, removeSample, uninstall, type InstallOptions } from "../apps/installer.js";
+import { APP_ICONS, createOwnApp, ensureMyTables, isOwnApp, MY_TABLES, ownAppTables, renameOwnApp, tableHomes } from "../apps/ownApps.js";
 import { HttpError, param } from "../lib/http.js";
 import { currentUser } from "../middleware/auth.js";
 import { audit } from "../repo/auditRepo.js";
@@ -36,7 +37,10 @@ export async function listAppsHandler(_req: Request, res: Response) {
   // the catalog, plus apps drafted with AI that are installed
   const ai = (await featureOn("draftApps")) ? await activeAi() : null;
   const drafted = [...installed.keys()].filter((k) => !APPS.some((a) => a.key === k)).flatMap((k) => APP_BY_KEY.get(k) ?? []);
+  // apps you made: the tables in them now (they don't create any themselves)
+  const ownTables = await ownAppTables();
   res.json({
+    icons: APP_ICONS,
     aiDrafts: Boolean(ai),
     aiName: ai ? PROVIDER_NAMES[ai.provider] : null,
     apps: [...APPS, ...drafted].map((app) => {
@@ -49,11 +53,15 @@ export async function listAppsHandler(_req: Request, res: Response) {
         group: app.group ?? app.name,
         needs: app.needs ?? [],
         tables: app.tables.map((t) => ({ key: t.key, label: t.label, description: t.description })),
+        // made here ("New app", My tables, drafted with AI): can be renamed
+        own: isOwnApp(app.key),
         installed: row
           ? {
               version: row.version,
               installedAt: row.installed_at,
               tables: row.created_tables,
+              // every table in it now, for apps you made
+              ...(isOwnApp(app.key) ? { inApp: ownTables.get(app.key) ?? [] } : {}),
               sampleRecords: Object.values(row.sample_ids ?? {}).flat().length,
             }
           : null,
@@ -91,7 +99,10 @@ export async function installHandler(req: Request, res: Response) {
 export async function uninstallHandler(req: Request, res: Response) {
   await loadDraftedApps();
   const key = param(req, "key");
+  if (key === MY_TABLES) throw new HttpError(409, "My tables can't be removed. Rename it if you like");
   const result = await uninstall(key);
+  // tables it didn't create are now in My tables: its Manager gets them
+  await ensureMyTables();
   await deleteUploads(result.removedFiles);
   await audit(req, { action: "uninstall", entity: "app", recordId: key, changes: { tables: result.removedTables } });
   res.json({ removedTables: result.removedTables });
@@ -154,3 +165,26 @@ export async function draftHandler(req: Request, res: Response) {
   res.json({ draft, app: { key: app.key, name: app.name, description: app.description, tables: app.tables.map((t) => ({ key: t.key, label: t.label, description: t.description })) } });
 }
 
+
+// POST /apps/own { name, icon }: "New app", with its own Manager and Staff
+export async function createOwnAppHandler(req: Request, res: Response) {
+  const app = await createOwnApp(req.body ?? {}, currentUser(req)._id);
+  await audit(req, { action: "create", entity: "app", recordId: app.key, changes: { name: app.name, icon: app.icon } });
+  res.status(201).json(app);
+}
+
+// PUT /apps/:key { name, icon }: rename an app you made (or My tables)
+export async function renameAppHandler(req: Request, res: Response) {
+  await loadDraftedApps();
+  const key = param(req, "key");
+  const before = APP_BY_KEY.get(key)?.name;
+  const app = await renameOwnApp(key, req.body ?? {});
+  await audit(req, { action: "update", entity: "app", recordId: key, changes: { name: app.name, icon: app.icon, before } });
+  res.json(app);
+}
+
+// GET /apps/homes: the apps a table can be added to or moved into
+export async function homesHandler(_req: Request, res: Response) {
+  await ensureMyTables();
+  res.json(await tableHomes());
+}

@@ -51,7 +51,7 @@ Four ideas, each with one job:
 |---|---|---|
 | **App access** | What a person can do in each app: No access / Staff / Manager | Users → the person |
 | **Department** | Which team they're in (and, on "each department" tables, whose records they see) | Users → the person |
-| **Who sees the records** | Per table: everyone who can use it, or each department only its own | Tables → the table → Access |
+| **Who sees the records** | Per table: everyone with access, or split by department | Tables → the table → Access |
 | **Visible to** | Which departments see one record (only on "each department" tables) | The record form |
 
 **With apps** (the usual way): pick an organization type in **Manage apps**.
@@ -78,13 +78,31 @@ has full access); give people that role on the **Users** page.
 
 **What a user then sees** depends on the table's **Who sees the records**
 (`table_schemas.by_department`):
-- **Everyone who can use this table** (apps and tables made in the app): their
+- **Everyone with access** (apps and tables made in the app): their
   role decides; departments aren't needed and don't limit records.
-- **Each department only its own** (tables made before this setting, and the
+- **Split by department** (tables made before this setting, and the
   API's default): the table appears when their role has **view** *and* they
   share a department with it, and they see only records **visible to** one of
   those departments. A record can be visible to several (a project for
-  Engineering *and* Design). A table with no department is admin-only.
+  Engineering *and* Design).
+  - **It needs at least one department.** `PUT /schema/:table` refuses "split"
+    with none (400), and the screen won't save it. Older tables made through
+    the API without departments stay admin-only until one is chosen; their
+    other settings still save.
+
+**Checking access** (admins), worked out by `src/auth/accessSummary.ts` with
+the same functions that enforce it (`tablePermissions`, `allowedDepartments`),
+so it can't disagree with what people see:
+- **What they can do** (`GET /users/:id/access`): Users → a person's menu, or
+  **What they can do** in their dialog. Every table, grouped by app, in plain
+  words ("Leave requests: view, add and edit, only their own records"). A
+  table their role allows but that's closed because they're in none of its
+  departments is called out, with the department they'd need.
+- **Who can use this table** (`GET /schema/:table/access`): at the top of
+  Tables → the table → Access. Every role that opens it, what it may do, and
+  how many people have it.
+- The wording lives in `apps/web/src/lib/accessWords.ts`. A test checks that
+  "What they can do" matches what the person really gets from `/schema`.
 
 **"Own only"** (a tick per table in the role, next to View/Create/Edit/Delete)
 shows the user just their **own records** instead: ones they created, or
@@ -689,6 +707,35 @@ An **app** (Projects, HR & leave, CRM, Helpdesk, …) is a blueprint of tables,
 columns, links and roles in `src/apps/`. Installing it creates **ordinary
 tables** that can then be changed like any other. An **organization type**
 ("IT / software company") is a set of apps installed together.
+
+**Every table is in an app** (`src/apps/ownApps.ts`), and every app has a
+**Manager** and a **Staff** role, so access is always given the same way: App
+access on the person.
+- **My tables** (key `my-tables`): tables you built yourself. A table with
+  no `app_key` is in it. It's made at start-up (`ensureMyTables()`), can be
+  renamed, and can't be removed. Its Manager always has everything on its
+  tables.
+- **Apps you make** (Manage apps → **New app**: a name and one of 16 icons,
+  key `custom-…`). They're kept in `installed_apps` like AI-drafted apps
+  (`options.own`; a rename goes in `options.name/icon` and renames the two
+  roles too). Shown under **Your apps**, with Rename and Remove.
+- **New table** (`POST /schema { app, staff }`) asks for the app, and what
+  its Staff may do: `none` (the API's default), `view`, or `work` (view, add
+  and edit; the screen's default). Its Manager gets everything. A wrong app
+  is refused before anything is made. The apps offered (`GET /apps/homes`)
+  are My tables, your own apps, and installed apps that show as themselves
+  (not Company's parts).
+- **Moving a table** (`PUT /schema/:table/app`, the App choice in its Access
+  card): only tables you made (no `blueprint_key`); a table that came with an
+  app stays in it (409). It takes its Staff rights along, the new app's
+  Manager gets everything, and the old app's roles lose it. Roles you made
+  yourself keep their rights. No confirm: moving back undoes it.
+- **Removing an app you made** deletes nothing it didn't create: its tables
+  move to My tables with their records (`uninstall()` clears `app_key`, then
+  `ensureMyTables()`), and its two roles go. Typing the name is only asked
+  when tables would be deleted (AI-drafted apps).
+- **"Admins only"** is shown only for a table split by department that has
+  no department; a table for everyone with access never shows it.
 
 - **Preview first:** `POST /api/apps/plan` works out what an install would do
   (`plan()` in `src/apps/installer.ts`). The drawer shows exactly that: tables

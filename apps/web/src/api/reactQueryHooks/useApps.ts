@@ -12,7 +12,17 @@ export type AppInfo = {
   group: string;
   needs: string[];
   tables: { key: string; label: string; description: string }[];
-  installed: { version: number; installedAt: string; tables: string[]; sampleRecords: number } | null;
+  // made here: New app, My tables, or drafted with AI (can be renamed)
+  own?: boolean;
+  installed: {
+    version: number;
+    installedAt: string;
+    // tables it created (removed with it)
+    tables: string[];
+    // apps you made: every table in it now
+    inApp?: string[];
+    sampleRecords: number;
+  } | null;
 };
 
 export type BundleInfo = { key: string; name: string; description: string; icon: string; apps: string[] };
@@ -58,7 +68,8 @@ export type InstallResult = {
 export const useApps = () =>
   useQuery({
     queryKey: ["apps"],
-    queryFn: async () => (await api.get<{ apps: AppInfo[]; bundles: BundleInfo[]; aiDrafts: boolean; aiName: string | null }>("/apps")).data,
+    queryFn: async () =>
+      (await api.get<{ apps: AppInfo[]; bundles: BundleInfo[]; aiDrafts: boolean; aiName: string | null; icons: string[] }>("/apps")).data,
   });
 
 // What installing would do; refreshed whenever the choices change.
@@ -73,7 +84,7 @@ export const useInstallPlan = (apps: string[] | null, options: InstallOptions, d
 
 // apps change tables, roles and the sidebar
 const refreshAll = (qc: ReturnType<typeof useQueryClient>) => {
-  for (const key of ["apps", "tables", "schema", "roles", "users", "appAccessOptions", "tableData", "related"]) qc.invalidateQueries({ queryKey: [key] });
+  for (const key of ["apps", "tables", "schema", "roles", "users", "appAccessOptions", "tableData", "related", "tableUse"]) qc.invalidateQueries({ queryKey: [key] });
 };
 
 const fail = (title: string) => (error: unknown) =>
@@ -106,7 +117,9 @@ export const useUninstallApp = () => {
       refreshAll(qc);
       notifications.show({
         title: "App removed",
-        message: `Deleted ${data.removedTables.length} table${data.removedTables.length === 1 ? "" : "s"}`,
+        message: data.removedTables.length
+          ? `Deleted ${data.removedTables.length} table${data.removedTables.length === 1 ? "" : "s"}`
+          : "Its tables are in My tables now",
         color: "green",
       });
     },
@@ -123,5 +136,51 @@ export const useRemoveSample = () => {
       notifications.show({ title: "Sample records removed", message: `${data.removed} removed`, color: "green" });
     },
     onError: fail("Couldn't remove the sample records"),
+  });
+};
+
+/* ---------------- apps you make; where a table goes ---------------- */
+
+export type TableHome = { key: string; name: string; icon: string; own: boolean };
+
+// the apps a table can be added to or moved into (My tables first)
+export const useTableHomes = () =>
+  useQuery({
+    queryKey: ["apps", "homes"],
+    queryFn: async () => (await api.get<TableHome[]>("/apps/homes")).data,
+  });
+
+export const useCreateOwnApp = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { name: string; icon: string }) => (await api.post<{ key: string; name: string; icon: string }>("/apps/own", input)).data,
+    onSuccess: (app) => {
+      refreshAll(qc);
+      notifications.show({ title: "App made", message: `${app.name} is ready. Add tables to it from Tables & columns.`, color: "green" });
+    },
+  });
+};
+
+export const useRenameApp = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ key, ...input }: { key: string; name: string; icon: string }) => (await api.put(`/apps/${key}`, input)).data,
+    onSuccess: () => {
+      refreshAll(qc);
+      notifications.show({ title: "App renamed", message: "Saved", color: "green" });
+    },
+  });
+};
+
+// move a table you made to another app
+export const useMoveTable = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ table, app }: { table: string; app: string }) => (await api.put<{ message: string }>(`/schema/${table}/app`, { app })).data,
+    onSuccess: (data) => {
+      refreshAll(qc);
+      notifications.show({ title: "Table moved", message: data.message, color: "green" });
+    },
+    onError: fail("Couldn't move the table"),
   });
 };

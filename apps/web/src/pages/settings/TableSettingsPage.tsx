@@ -3,6 +3,7 @@ import type { RecordColumn } from "../../features/records/schema";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Group,
@@ -33,7 +34,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { assignUnassignedRecords, deleteTable, errorMessage } from "../../api/api";
-import { useDepartments } from "../../api/reactQueryHooks/useAdmin";
+import { useDepartments, useTableUse } from "../../api/reactQueryHooks/useAdmin";
 import { useDeleteColumn, useSchema, useUpdateTableSettings } from "../../api/reactQueryHooks/useTables";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 import { confirmDanger } from "../../components/ui/confirm";
@@ -41,8 +42,12 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Page, PageHeader, Section } from "../../components/ui/Page";
 import { tablePath, tableTitle } from "../../layout/nav";
 import { pluralize } from "../../lib/format";
+import { joinOr, rightsInWords } from "../../lib/accessWords";
 import { ColumnModal, type SchemaColumn } from "./ColumnModal";
 import { columnTypeInfo } from "./columnTypes";
+import { WithHelp } from "../../components/ui/HelpTip";
+import { useMoveTable, useTableHomes } from "../../api/reactQueryHooks/useApps";
+import { AppIcon } from "../../features/apps/AppIcon";
 
 type Schema = {
   tableName: string;
@@ -51,9 +56,87 @@ type Schema = {
   byDepartment?: boolean;
   departments: { _id: string; name: string }[];
   unassignedCount?: number;
+  // the app it's in (My tables when it has none); blueprintKey: it came with that app
+  app?: { key: string; name: string; icon: string } | null;
+  blueprintKey?: string | null;
 };
 
 /* ---------------- access ---------------- */
+
+// The app a table is in. Tables you made can move; they take their Staff
+// rights along, and the new app's Managers get everything.
+function AppChoice({ schema }: { schema: Schema }) {
+  const { data: homes = [] } = useTableHomes();
+  const move = useMoveTable();
+  const current = schema.app?.key ?? "my-tables";
+  if (schema.blueprintKey) {
+    return (
+      <Group gap="xs" wrap="nowrap">
+        <AppIcon name={schema.app?.icon ?? "IconApps"} size={24} />
+        <Text size="sm">
+          In <b>{schema.app?.name}</b>. It came with that app, so it stays there.
+        </Text>
+      </Group>
+    );
+  }
+  return (
+    <Select
+      label={<WithHelp topic="tableApp">App</WithHelp>}
+      description="Moving it takes what Staff can do along. The new app's Managers can do everything."
+      data={homes.map((h) => ({ value: h.key, label: h.name }))}
+      value={current}
+      leftSection={<AppIcon name={homes.find((h) => h.key === current)?.icon ?? schema.app?.icon ?? "IconTable"} size={22} />}
+      allowDeselect={false}
+      disabled={move.isPending}
+      onChange={(app) => app && app !== current && move.mutate({ table: schema.tableName, app })}
+      maw={420}
+    />
+  );
+}
+
+// "Who can use this table": every role that opens it, in plain words, from
+// the server's own rules. Changing it happens on the Users and Roles pages.
+function WhoCanUse({ schema }: { schema: Schema }) {
+  const { data, isLoading } = useTableUse(schema.tableName);
+  const split = schema.byDepartment !== false;
+  const scope = (own: boolean) => (own ? "only their own records" : split ? "their departments' records" : "all records");
+  return (
+    <Stack gap={6}>
+      <Text size="sm" fw={500}>
+        Who can use this table
+      </Text>
+      {isLoading || !data ? (
+        <Skeleton h={48} />
+      ) : (
+        <>
+          {data.roles.length === 0 && (
+            <Text size="sm">
+              <b>Only admins so far.</b> Give people Staff or Manager in its app under App access (Users), or add it to a role on the{" "}
+              <Anchor component={Link} to="/settings/roles" inherit>
+                Roles page
+              </Anchor>
+              .
+            </Text>
+          )}
+          {data.roles.map((r) => (
+            <Group key={r.roleId} gap="xs" wrap="nowrap" align="baseline">
+              <Text size="sm" style={{ flex: 1, minWidth: 0 }}>
+                <b>{r.name}</b>: {rightsInWords(r).toLowerCase()}, {scope(r.own)}
+              </Text>
+              <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                {pluralize(r.people, "person", "people")}
+              </Text>
+            </Group>
+          ))}
+          <Text size="sm" c="dimmed">
+            Admins can always do everything ({pluralize(data.admins, "person", "people")}).
+            {split && schema.departments.length > 0 && ` People also need to be in ${joinOr(schema.departments.map((d) => d.name))}.`}
+          </Text>
+        </>
+      )}
+    </Stack>
+  );
+}
 
 function AccessSection({ schema }: { schema: Schema }) {
   const qc = useQueryClient();
@@ -76,6 +159,9 @@ function AccessSection({ schema }: { schema: Schema }) {
     byDepartment !== (schema.byDepartment !== false) ||
     [...departmentIds].sort().join() !== schema.departments.map((d) => d._id).sort().join();
 
+  // split by department needs one: the server refuses it too
+  const noDepartment = byDepartment && departmentIds.length === 0;
+
   const assign = async () => {
     if (!assignTo) return;
     setAssigning(true);
@@ -97,10 +183,10 @@ function AccessSection({ schema }: { schema: Schema }) {
   return (
     <Section
       title="Access"
-      description="Roles decide who can open this table and what they can do. Here you choose who sees its records."
+      description="Who can open this table, and whose records they see."
       actions={
         <Button
-          disabled={!dirty}
+          disabled={!dirty || noDepartment}
           loading={save.isPending}
           onClick={() => save.mutate({ table: schema.tableName, data: { showInMenu, byDepartment, departmentIds } })}
         >
@@ -109,21 +195,23 @@ function AccessSection({ schema }: { schema: Schema }) {
       }
     >
       <Stack gap="md">
+        <AppChoice schema={schema} />
+        <WhoCanUse schema={schema} />
         <Radio.Group
-          label="Who sees the records"
+          label={<WithHelp topic="whoSeesRecords">Who sees the records</WithHelp>}
           value={byDepartment ? "department" : "everyone"}
           onChange={(v) => setByDepartment(v === "department")}
         >
           <Stack gap="sm" mt="xs">
             <Radio
               value="everyone"
-              label="Everyone who can use this table"
-              description="Anyone whose role allows this table sees all its records (or only their own, where the role says so)."
+              label="Everyone with access"
+              description="Everyone who can use this table sees all its records (or only their own, where their access says so). Right for most tables."
             />
             <Radio
               value="department"
-              label="Each department only its own"
-              description="People also need one of the departments below, and see only the records visible to their department."
+              label="Split by department"
+              description="Each department sees only its own records. People also need one of the departments below."
             />
           </Stack>
         </Radio.Group>
@@ -131,22 +219,16 @@ function AccessSection({ schema }: { schema: Schema }) {
           <MultiSelect
             label="Departments"
             description={
-              departments.length
-                ? "Leave empty to keep the table for admins only."
-                : "There are no departments yet. Create them under Administration → Departments."
+              departments.length ? "The departments that share this table." : "There are no departments yet. Create them under Administration → Departments."
             }
-            placeholder={departmentIds.length ? undefined : "Admins only"}
+            placeholder={departmentIds.length ? undefined : "Choose departments"}
+            error={noDepartment ? "Choose at least one department, or choose Everyone with access." : undefined}
             data={departments.map((d) => ({ value: d._id, label: d.name }))}
             value={departmentIds}
             onChange={setDepartmentIds}
             searchable
             clearable
           />
-        )}
-        {byDepartment && !departmentIds.length && (
-          <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />} p="sm">
-            <Text size="sm">With no department, only admins can see and use this table.</Text>
-          </Alert>
         )}
         <Switch
           label="Show in the sidebar"
@@ -487,7 +569,8 @@ export default function TableSettingsPage() {
           </>
         }
         meta={
-          schema.departments.length ? undefined : (
+          // only a split table needs a department; the others are for everyone with access
+          schema.byDepartment === false || schema.departments.length ? undefined : (
             <Badge color="yellow" leftSection={<IconAlertTriangle size={12} />}>
               Admins only
             </Badge>

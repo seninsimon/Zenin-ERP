@@ -41,10 +41,14 @@ const GROUPS: Record<string, { icon: string; description: string }> = {
   Company: { icon: "IconBuildingSkyscraper", description: "People, customers and products that your other apps share" },
 };
 
+// "My tables": the app of tables with no app_key (see ownApps.ts)
+export const MY_TABLES = "my-tables";
+
 // The launcher entry ("app") a table belongs to: its app, or the group its
-// app is in ("Company"). null for your own tables and unknown apps.
+// app is in ("Company"). No app_key = My tables. null for unknown apps.
 export function launcherApp(appKey: string | null): { key: string; name: string; icon: string; description: string } | null {
-  const app = appKey ? APP_BY_KEY.get(appKey) : undefined;
+  const app = APP_BY_KEY.get(appKey ?? MY_TABLES);
+  if (!app && !appKey) return { key: MY_TABLES, name: "My tables", icon: "IconTable", description: "Tables you built yourself" };
   if (!app) return null;
   if (app.group && app.group !== app.name) {
     const group = GROUPS[app.group];

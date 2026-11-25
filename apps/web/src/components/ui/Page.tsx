@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Box, Group, Stack, Text, Title } from "@mantine/core";
 import { useBranding } from "../../lib/branding";
+import type { HelpTopic } from "../../lib/help";
+import { HelpTip } from "./HelpTip";
 
 /* ------------------------------------------------------------------ */
 /* Breadcrumbs: pages declare them, the header shows them.             */
@@ -81,8 +83,11 @@ export function PageHeader({
   actions,
   icon,
   below,
+  help,
 }: {
   title: ReactNode;
+  // a "?" after the title, for pages whose idea isn't obvious
+  help?: HelpTopic;
   description?: ReactNode;
   // anything under the title (badges, buttons): not wrapped in a paragraph
   below?: ReactNode;
@@ -101,6 +106,7 @@ export function PageHeader({
             <Title order={2} style={{ overflowWrap: "anywhere" }}>
               {title}
             </Title>
+            {help && <HelpTip topic={help} size={18} />}
             {meta}
           </Group>
           {description && (
@@ -131,8 +137,11 @@ export function Section({
   children,
   padding = "lg",
   danger,
+  help,
 }: {
   title?: ReactNode;
+  // a "?" after the title
+  help?: HelpTopic;
   description?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
@@ -159,9 +168,12 @@ export function Section({
         >
           <Stack gap={2}>
             {title && (
-              <Title order={4} c={danger ? "var(--mantine-color-red-light-color)" : undefined}>
-                {title}
-              </Title>
+              <Group gap={4} wrap="nowrap">
+                <Title order={4} c={danger ? "var(--mantine-color-red-light-color)" : undefined}>
+                  {title}
+                </Title>
+                {help && <HelpTip topic={help} />}
+              </Group>
             )}
             {description && (
               <Text size="sm" c="dimmed">

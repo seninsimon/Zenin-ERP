@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Avatar,
+  Box,
   Badge,
   Button,
   Checkbox,
@@ -21,7 +22,7 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconEdit, IconKey, IconMail, IconPlus, IconTrash, IconUserCheck, IconUserOff, IconUsers } from "@tabler/icons-react";
+import { IconEdit, IconKey, IconListCheck, IconMail, IconPlus, IconTrash, IconUserCheck, IconUserOff, IconUsers } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useQuery } from "@tanstack/react-query";
 
@@ -39,6 +40,7 @@ import {
   type UserInput,
 } from "../../api/reactQueryHooks/useAdmin";
 import { AppIcon } from "../../features/apps/AppIcon";
+import { PersonAccessDrawer, PersonAccessSummary } from "../../features/access/PersonAccessDrawer";
 import { useTables } from "../../api/reactQueryHooks/useTables";
 import { useCurrentUser } from "../../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
@@ -47,6 +49,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Page, PageHeader } from "../../components/ui/Page";
 import { initialsOf } from "../../layout/UserMenu";
 import { formatDateTime, formatRelative, pluralize } from "../../lib/format";
+import { HelpTip, WithHelp } from "../../components/ui/HelpTip";
 
 const USERNAME = /^[a-zA-Z0-9._-]{3,50}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -107,9 +110,12 @@ function AppAccessFields({
   return (
     <Stack gap={6}>
       <div>
-        <Text size="sm" fw={500}>
-          App access
-        </Text>
+        <Group gap={2} wrap="nowrap">
+          <Text size="sm" fw={500}>
+            App access
+          </Text>
+          <HelpTip topic="appAccess" size={14} />
+        </Group>
         <Text size="xs" c="dimmed">
           What they can do in each app. Staff: everyday work, and only their own personal records (leave, time logs). Manager:
           everything, including approvals.
@@ -159,6 +165,8 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
   // new people: "email them a link to choose their password" (when email works)
   const { data: mail } = useEmailStatus();
   const [linkChoice, setLinkChoice] = useState<boolean | null>(null);
+  // "What they can do", opened inside the form
+  const [showAccess, setShowAccess] = useState(false);
   const sendLink = !user && Boolean(mail?.ready) && (linkChoice ?? true);
   const sendLinkRef = useRef(sendLink);
   sendLinkRef.current = sendLink;
@@ -185,21 +193,23 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
 
   useEffect(() => {
     if (!opened) return;
-    form.setValues(
-      user
-        ? {
-            username: user.username,
-            fullName: user.fullName,
-            email: user.email,
-            phone: user.phone,
-            password: "",
-            roleId: user.role._id,
-            departmentIds: user.departments.map((d) => d._id),
-            appAccess: user.appAccess ?? {},
-            isActive: user.isActive,
-          }
-        : { ...EMPTY, roleId: memberId }
-    );
+    setShowAccess(false);
+    const values: FormValues = user
+      ? {
+          username: user.username,
+          fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          password: "",
+          roleId: user.role._id,
+          departmentIds: user.departments.map((d) => d._id),
+          appAccess: user.appAccess ?? {},
+          isActive: user.isActive,
+        }
+      : { ...EMPTY, roleId: memberId };
+    form.setValues(values);
+    // the loaded person is the starting point for "unsaved changes"
+    form.resetDirty(values);
     form.clearErrors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, user, memberId]);
@@ -282,7 +292,7 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
 
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Select
-              label="Role"
+              label={<WithHelp topic="mainRole">Role</WithHelp>}
               description="Most people are Members: what they can do comes from App access below"
               withAsterisk
               data={mainRoles.map((r) => ({ value: r._id, label: r.isAdmin ? `${r.name} (can do everything)` : r.name }))}
@@ -290,7 +300,7 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
               {...form.getInputProps("roleId")}
             />
             <MultiSelect
-              label="Departments"
+              label={<WithHelp topic="departments">Departments</WithHelp>}
               description={
                 selectedRole?.isAdmin
                   ? "Admins see every department anyway"
@@ -309,6 +319,25 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
               value={form.values.appAccess}
               onChange={(next) => form.setFieldValue("appAccess", next)}
             />
+          )}
+
+          {user && (
+            <div>
+              <Button
+                variant="subtle"
+                size="compact-sm"
+                leftSection={<IconListCheck size={16} />}
+                onClick={() => setShowAccess((v) => !v)}
+                aria-expanded={showAccess}
+              >
+                {showAccess ? "Hide what they can do" : "What they can do"}
+              </Button>
+              {showAccess && (
+                <Box mt="xs" p="md" style={{ border: "1px solid var(--app-border)", borderRadius: "var(--mantine-radius-md)" }}>
+                  <PersonAccessSummary userId={user._id} unsaved={form.isDirty()} />
+                </Box>
+              )}
+            </div>
           )}
 
           {!user && hasDirectory && (
@@ -400,6 +429,7 @@ export default function UsersPage() {
   const remove = useDeleteUser();
   const [modal, setModal] = useState<{ user: User | null } | null>(null);
   const [resetting, setResetting] = useState<User | null>(null);
+  const [showing, setShowing] = useState<User | null>(null);
   const { data: mail } = useEmailStatus();
 
   const columns = useMemo<DataTableColumn<User>[]>(
@@ -586,6 +616,7 @@ export default function UsersPage() {
       <PageHeader
         title="Users"
         description="Accounts, their role and the departments they work in."
+        help="users"
         meta={users.length ? <Badge variant="default">{pluralize(users.length, "user")}</Badge> : undefined}
         actions={
           <Button leftSection={<IconPlus size={16} />} onClick={() => setModal({ user: null })}>
@@ -610,6 +641,9 @@ export default function UsersPage() {
           const self = u._id === me._id;
           return (
             <>
+              <Menu.Item leftSection={<IconListCheck size={16} />} onClick={() => setShowing(u)}>
+                What they can do
+              </Menu.Item>
               <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => setModal({ user: u })}>
                 Edit
               </Menu.Item>
@@ -653,6 +687,7 @@ export default function UsersPage() {
       />
 
       <UserModal opened={modal !== null} onClose={() => setModal(null)} user={modal?.user ?? null} />
+      <PersonAccessDrawer person={showing} onClose={() => setShowing(null)} />
       <ResetPasswordModal user={resetting} onClose={() => setResetting(null)} />
     </Page>
   );

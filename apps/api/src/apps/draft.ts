@@ -9,6 +9,7 @@ import { checkFormulas } from "../schema/formula.js";
 import type { Column } from "../types.js";
 import { autonum, bool, choice, date, file, formula, image, link, longText, managerRole, num, staffRole, text, user, WORK } from "./dsl.js";
 import { APP_BY_KEY } from "./index.js";
+import { loadOwnApps } from "./ownApps.js";
 import type { AppBlueprint, ColumnBlueprint } from "./types.js";
 
 // "We're a 12-person dental clinic with two branches" -> the AI chosen in
@@ -195,4 +196,6 @@ export async function loadDraftedApps() {
       // an old draft that no longer reads: the app still shows by key
     }
   }
+  // and apps you made yourself, and new names
+  await loadOwnApps();
 }

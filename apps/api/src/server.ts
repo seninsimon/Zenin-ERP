@@ -3,6 +3,7 @@ import { env } from "./config/env.js";
 import { pool } from "./db/pool.js";
 import { loadDraftedApps } from "./apps/draft.js";
 import { ensureAppRoles, upgradeInstalledApps } from "./apps/installer.js";
+import { ensureMyTables } from "./apps/ownApps.js";
 import { importAiSettingsFromEnv } from "./ai/settings.js";
 import { importMailSettingsFromEnv } from "./controllers/email.js";
 import { startWorker } from "./jobs/worker.js";
@@ -17,6 +18,8 @@ try {
   // apps installed before apps had their own roles get them (once)
   await loadDraftedApps();
   const added = await ensureAppRoles();
+  // "My tables" is an app too, with its own Manager and Staff
+  await ensureMyTables();
   if (added) logger.info({ apps: added }, "gave installed apps their own roles");
   // installed apps whose blueprint got newer: their new and corrected automations
   const upgraded = await upgradeInstalledApps();

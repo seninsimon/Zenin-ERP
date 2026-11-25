@@ -38,6 +38,7 @@ import { Page, PageHeader } from "../../components/ui/Page";
 import { tableTitle } from "../../layout/nav";
 import { pluralize } from "../../lib/format";
 import classes from "./settings.module.css";
+import { HelpTip } from "../../components/ui/HelpTip";
 
 const ACTIONS = ["view", "create", "edit", "delete"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -164,14 +165,12 @@ function PermissionMatrix({
               );
             })}
             <Table.Th w={90}>
-              <Tooltip label={OWN_HELP} multiline w={260} withArrow>
-                <Group gap={4} justify="center" wrap="nowrap" style={{ cursor: "help" }}>
-                  <Text size="xs" fw={600}>
-                    Own only
-                  </Text>
-                  <IconInfoCircle size={13} aria-hidden />
-                </Group>
-              </Tooltip>
+              <Group gap={0} justify="center" wrap="nowrap">
+                <Text size="xs" fw={600}>
+                  Own only
+                </Text>
+                <HelpTip topic="ownOnly" size={13} />
+              </Group>
             </Table.Th>
             <Table.Th w={70}>
               <Text size="xs" fw={600}>
@@ -420,6 +419,7 @@ export default function RolesPage() {
     <Page title="Roles & permissions" breadcrumbs={[{ label: "Administration" }, { label: "Roles & permissions" }]} width="wide">
       <PageHeader
         title="Roles & permissions"
+        help="roles"
         description="A role says what people can do in each table: view, create, edit or delete. Apps bring their own roles; give them to people through App access on the Users page."
         meta={roles.length ? <Badge variant="default">{pluralize(roles.length, "role")}</Badge> : undefined}
         actions={

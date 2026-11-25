@@ -402,6 +402,32 @@ Formatting helpers live in `src/lib/format.ts`.
   - pluralise correctly with `pluralize()`.
 - **Empty values:** "—". Unknown users show as "System".
 
+### Help (?)
+
+A small **?** after a heading or label opens a short note (`HelpTip`,
+`components/ui/HelpTip.tsx`). Every note's text lives in `lib/help.ts`, so a
+topic is explained the same way everywhere.
+- **Only where an idea isn't obvious** from its label and one-line
+  description: access, departments, formulas, totals, approvals,
+  automations. If the description already says enough (Prefix, Column name,
+  Indexed), add nothing.
+- **At most one per section.** The one-line `description` stays; the longer
+  explanation goes in the note.
+- **The note:** a title, 1–3 short sentences, and one "For example". Plain
+  words, no jargon.
+- **How to add it:** `help="topic"` on `PageHeader` or `Section`;
+  `label={<WithHelp topic="topic">Label</WithHelp>}` on a field.
+- **Behaviour (built in):**
+  - it opens on click or tap, not hover;
+  - Esc or a click outside closes it, and Esc never closes the dialog
+    around it;
+  - focus moves into the note and back to the ?;
+  - screen readers hear "Help: \<title\>".
+- **Inside another pop-up,** pass `withinPortal={false}`, so a click on the note
+  doesn't close the pop-up.
+- **Prefer preventing a mistake over explaining it.** Good defaults and a
+  warning at the right moment beat a note nobody opens.
+
 ---
 
 ## 10. Responsive design
@@ -477,6 +503,7 @@ Target: **WCAG 2.2 AA**.
 | Any list | `DataTable` (+ `FilterBar`, `useTableUrlState`) |
 | Record values | `FieldValue` |
 | Nothing to show | `EmptyState` |
+| Explain an idea that isn't obvious | `HelpTip` / `WithHelp`, text in `lib/help.ts` (§9) |
 | Delete/disable confirmation | `confirmDanger` |
 | Dates, numbers, file names | `lib/format.ts` |
 | Navigation entries | `layout/nav.ts` |

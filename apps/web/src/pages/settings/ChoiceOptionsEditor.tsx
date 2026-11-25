@@ -19,6 +19,7 @@ import { IconArrowDown, IconArrowUp, IconLock, IconLockOpen, IconPlus, IconX } f
 import { useRoles } from "../../api/reactQueryHooks/useAdmin";
 
 import type { ChoiceOption } from "../../features/records/schema";
+import { WithHelp } from "../../components/ui/HelpTip";
 
 // Same list as the API (CHOICE_COLORS in src/schema/columns.ts). New options
 // take the next unused colour, so nobody has to pick colours.
@@ -81,7 +82,11 @@ function WhoCanChoose({ label, value, onChange }: { label: string; value: string
       </Popover.Target>
       <Popover.Dropdown>
         <MultiSelect
-          label={`Who can choose “${label || "this"}”`}
+          label={
+            <WithHelp topic="whoCanChoose" withinPortal={false}>
+              Who can choose “{label || "this"}”
+            </WithHelp>
+          }
           description="An approval step. Leave empty: anyone who can edit. Admins always can."
           data={roles.filter((r) => !r.isAdmin).map((r) => ({ value: r._id, label: r.name }))}
           value={value}

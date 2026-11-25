@@ -268,3 +268,54 @@ export const useDeleteDepartment = () => {
     onError: notifyError("Could not delete department"),
   });
 };
+
+/* ---------------- access summaries (worked out on the server) ---------------- */
+
+export type AccessApp = { key: string; name: string; icon: string } | null;
+
+// one table in "What they can do"
+export type TableAccessRow = {
+  tableName: string;
+  app: AccessApp;
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+  own: boolean;
+  // split by department: whose records they see (null = every record)
+  departments: string[] | null;
+  // their role allows it, but they're in none of the table's departments
+  needsDepartment?: string[];
+};
+
+export type PersonAccess = {
+  admin: boolean;
+  role: string;
+  appLevels: Record<string, string>;
+  departments: string[];
+  tables: TableAccessRow[];
+};
+
+// "What they can do". Always fresh: roles, departments and tables change it.
+export const usePersonAccess = (userId: string | null) =>
+  useQuery({
+    queryKey: ["users", userId, "access"],
+    queryFn: async () => (await api.get<PersonAccess>(`/users/${userId}/access`)).data,
+    enabled: Boolean(userId),
+    refetchOnMount: "always",
+  });
+
+export type TableUse = {
+  admins: number;
+  splitByDepartment: boolean;
+  departments: string[];
+  roles: { roleId: string; name: string; appKey: string | null; view: boolean; create: boolean; edit: boolean; delete: boolean; own: boolean; people: number }[];
+};
+
+// "Who can use this table"
+export const useTableUse = (table: string) =>
+  useQuery({
+    queryKey: ["tableUse", table],
+    queryFn: async () => (await api.get<TableUse>(`/schema/${table}/access`)).data,
+    refetchOnMount: "always",
+  });

@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import { accessOf, accessOptions, rolesForAccess } from "../apps/access.js";
 import { addToDirectory } from "../apps/directory.js";
 import { normalizePermissions } from "../auth/access.js";
+import { personAccess } from "../auth/accessSummary.js";
 import { hashPassword, validateNewPassword } from "../auth/password.js";
 import { isUniqueViolation } from "../db/pool.js";
 import { cleanText, HttpError, isValidEmail, param, toIdList, USERNAME_PATTERN } from "../lib/http.js";
@@ -97,6 +98,13 @@ const withAccess = <T extends Pick<CurrentUser, "appRoles">>(user: T) => ({ ...u
 export const getUsers = async (_req: Request, res: Response) => res.json((await listUsers()).map(withAccess));
 
 // GET /users/app-access: the apps a person can be given access to, and their levels
+// GET /users/:id/access: "What they can do", worked out with the real rules
+export async function getUserAccessHandler(req: Request, res: Response) {
+  const user = await getUserById(param(req, "id"));
+  if (!user) throw new HttpError(404, "User not found");
+  res.json(await personAccess(user));
+}
+
 export const getAppAccessOptions = async (_req: Request, res: Response) => res.json(await accessOptions());
 
 export async function createUserHandler(req: Request, res: Response) {

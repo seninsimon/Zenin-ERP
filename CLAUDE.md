@@ -52,7 +52,7 @@ automations without code. Built by one founder in Thrissur, Kerala.
   export TEST_DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2- | sed -E 's#/[^/?]+$#/generic_erp_test#')"
   pnpm test
   ```
-  All tests must pass (256 on 2026-11-24). Add tests for new behaviour.
+  All tests must pass (271 on 2026-11-25). Add tests for new behaviour.
 - **Web:**
   ```bash
   cd apps/web

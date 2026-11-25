@@ -38,3 +38,26 @@
   border-radius: var(--mantine-radius-md);
   padding: var(--mantine-spacing-sm);
 }
+
+/* icon picker for apps you make (New app, Rename) */
+.iconChoice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: var(--mantine-radius-md);
+}
+
+.iconChoice:hover {
+  background: var(--app-muted);
+}
+
+.iconChoice[data-selected] {
+  border-color: var(--mantine-primary-color-filled);
+}
+
+.iconChoice:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}

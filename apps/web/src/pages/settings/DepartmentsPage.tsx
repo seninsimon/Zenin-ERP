@@ -164,6 +164,7 @@ export default function DepartmentsPage() {
     <Page title="Departments" breadcrumbs={[{ label: "Administration" }, { label: "Departments" }]} width="wide">
       <PageHeader
         title="Departments"
+        help="departments"
         description="Departments decide which tables and records people can see."
         meta={departments.length ? <Badge variant="default">{pluralize(departments.length, "department")}</Badge> : undefined}
         actions={

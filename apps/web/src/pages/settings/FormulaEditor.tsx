@@ -7,6 +7,7 @@ import { checkFormula, errorMessage } from "../../api/api";
 import { useSchema } from "../../api/reactQueryHooks/useTables";
 import { columnLabel, type RecordColumn, type TableSchemaInfo } from "../../features/records/schema";
 import { formatDate, formatNumber } from "../../lib/format";
+import { WithHelp } from "../../components/ui/HelpTip";
 
 // Columns a formula can use
 const USABLE = ["text", "textarea", "number", "date", "boolean", "autonumber", "formula"];
@@ -86,7 +87,7 @@ export function FormulaEditor({
     <Stack gap={6}>
       <Textarea
         ref={ref}
-        label="Formula"
+        label={<WithHelp topic="formula">Formula</WithHelp>}
         withAsterisk
         description="Use {field} for a field, + − * / and ROUND, MIN, MAX, ABS, IF, DAYS, ADD_DAYS, CONCAT, BLANK"
         placeholder="e.g. {basic} + {allowances} - {deductions}"

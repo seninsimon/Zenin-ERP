@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Card,
+  UnstyledButton,
   Checkbox,
   Drawer,
   Group,
@@ -22,6 +23,8 @@ import { notifications } from "@mantine/notifications";
 import {
   IconArrowRight,
   IconCheck,
+  IconPencil,
+  IconPlus,
   IconSparkles,
 } from "@tabler/icons-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -29,7 +32,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDepartments } from "../../api/reactQueryHooks/useAdmin";
 import {
   useApps,
+  useCreateOwnApp,
   useDraftApp,
+  useRenameApp,
   useInstallApps,
   useInstallPlan,
   useRemoveSample,
@@ -41,6 +46,8 @@ import { Page, PageHeader, Section } from "../../components/ui/Page";
 import { tablePath, tableTitle } from "../../layout/nav";
 import { AppIcon } from "../../features/apps/AppIcon";
 import { formatDate } from "../../lib/format";
+import { errorMessage } from "../../api/api";
+import classes from "./settings.module.css";
 
 /* ---------------- install preview ---------------- */
 
@@ -246,27 +253,40 @@ function RemoveAppModal({ app, onClose }: { app: AppInfo | null; onClose: () => 
     setTyped("");
     onClose();
   };
+  // apps that created tables delete them; apps you made move theirs to My tables
+  const deletes = Boolean(app?.installed?.tables.length);
+  const moves = (app?.installed?.inApp ?? []).filter((t) => !app?.installed?.tables.includes(t));
   return (
     <Modal opened={Boolean(app)} onClose={close} title={`Remove ${app?.name ?? ""}`}>
       {app && (
         <Stack>
-          <Text size="sm">
-            This deletes the tables it added ({app.installed?.tables.map(tableTitle).join(", ") || "none"}) <b>with all their records</b>. It
-            can't be undone. Its roles stay.
-          </Text>
-          <TextInput
-            label={`Type "${app.name}" to confirm`}
-            value={typed}
-            onChange={(e) => setTyped(e.currentTarget.value)}
-            data-autofocus
-          />
+          {deletes ? (
+            <Text size="sm">
+              This deletes the tables it added ({app.installed!.tables.map(tableTitle).join(", ")}) <b>with all their records</b>. It can't be
+              undone.{app.own ? " Tables you added to it later move to My tables." : ""}
+            </Text>
+          ) : (
+            <Text size="sm">
+              {moves.length ? (
+                <>
+                  Its tables ({moves.map(tableTitle).join(", ")}) move to My tables, <b>with all their records</b>.{" "}
+                </>
+              ) : (
+                "It has no tables. "
+              )}
+              People lose the access this app gave them.
+            </Text>
+          )}
+          {deletes && (
+            <TextInput label={`Type "${app.name}" to confirm`} value={typed} onChange={(e) => setTyped(e.currentTarget.value)} data-autofocus />
+          )}
           <Group justify="flex-end" gap="xs">
             <Button variant="default" onClick={close}>
               Cancel
             </Button>
             <Button
               color="red"
-              disabled={typed.trim() !== app.name}
+              disabled={deletes && typed.trim() !== app.name}
               loading={uninstall.isPending}
               onClick={() => uninstall.mutateAsync(app.key).then(close, () => {})}
             >
@@ -275,6 +295,105 @@ function RemoveAppModal({ app, onClose }: { app: AppInfo | null; onClose: () => 
           </Group>
         </Stack>
       )}
+    </Modal>
+  );
+}
+
+/* ---------------- your own apps: new and rename ---------------- */
+
+function AppNameModal({
+  opened,
+  app,
+  icons,
+  onClose,
+}: {
+  opened: boolean;
+  // null = a new app
+  app: AppInfo | null;
+  icons: string[];
+  onClose: () => void;
+}) {
+  const create = useCreateOwnApp();
+  const rename = useRenameApp();
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState("IconApps");
+  const [error, setError] = useState<string | null>(null);
+  const [seen, setSeen] = useState<string | null>(null);
+  // fill in when opened (state from props, without an effect)
+  const openedFor = opened ? (app?.key ?? "new") : null;
+  if (openedFor !== seen) {
+    setSeen(openedFor);
+    setName(app?.name ?? "");
+    setIcon(app?.icon ?? "IconApps");
+    setError(null);
+  }
+  const busy = create.isPending || rename.isPending;
+  const save = async () => {
+    try {
+      if (app) await rename.mutateAsync({ key: app.key, name: name.trim(), icon });
+      else await create.mutateAsync({ name: name.trim(), icon });
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+  return (
+    <Modal opened={opened} onClose={onClose} title={app ? `Rename ${app.name}` : "New app"}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <Stack>
+          {!app && (
+            <Text size="sm" c="dimmed">
+              An app groups tables for one kind of work, with its own Staff and Manager. Add tables to it from Tables & columns.
+            </Text>
+          )}
+          <TextInput
+            label="Name"
+            placeholder="e.g. Purchasing"
+            withAsterisk
+            maxLength={40}
+            data-autofocus
+            value={name}
+            onChange={(e) => {
+              setName(e.currentTarget.value);
+              setError(null);
+            }}
+            error={error}
+          />
+          <div>
+            <Text size="sm" fw={500} mb={6}>
+              Icon
+            </Text>
+            <SimpleGrid cols={8} spacing={6} role="radiogroup" aria-label="Icon">
+              {icons.map((i) => (
+                <UnstyledButton
+                  key={i}
+                  role="radio"
+                  aria-checked={icon === i}
+                  aria-label={i.replace(/^Icon/, "")}
+                  className={classes.iconChoice}
+                  data-selected={icon === i || undefined}
+                  onClick={() => setIcon(i)}
+                >
+                  <AppIcon name={i} size={30} />
+                </UnstyledButton>
+              ))}
+            </SimpleGrid>
+          </div>
+          <Group justify="flex-end" gap="xs">
+            <Button variant="default" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={busy} disabled={!name.trim()}>
+              {app ? "Save" : "Make app"}
+            </Button>
+          </Group>
+        </Stack>
+      </form>
     </Modal>
   );
 }
@@ -295,8 +414,11 @@ export default function AppsPage() {
   const [removing, setRemoving] = useState<AppInfo | null>(null);
   const removeSample = useRemoveSample();
 
+  const [naming, setNaming] = useState<{ app: AppInfo | null } | null>(null);
   const apps = useMemo(() => data?.apps ?? [], [data]);
-  const installed = apps.filter((a) => a.installed);
+  // your own apps (My tables, New app, drafted with AI) get their own section
+  const yours = apps.filter((a) => a.installed && a.own).sort((a, b) => (a.key === "my-tables" ? -1 : b.key === "my-tables" ? 1 : a.name.localeCompare(b.name)));
+  const installed = apps.filter((a) => a.installed && !a.own);
   const available = apps.filter((a) => !a.installed);
   const bundles = data?.bundles ?? [];
 
@@ -341,7 +463,13 @@ export default function AppsPage() {
     <Page title="Manage apps" breadcrumbs={[{ label: "Administration" }, { label: "Manage apps" }]} width="wide">
       <PageHeader
         title="Manage apps"
+        help="apps"
         description="Ready-made, connected tables for the work you do. Everything an app adds is yours to change afterwards."
+        actions={
+          <Button leftSection={<IconPlus size={16} />} onClick={() => setNaming({ app: null })}>
+            New app
+          </Button>
+        }
       />
       {isLoading ? (
         <Skeleton h={240} radius="lg" />
@@ -458,12 +586,46 @@ export default function AppsPage() {
             </Section>
           )}
 
+          {yours.length > 0 && (
+            <Section title="Your apps" help="ownApps" description="Apps you made, and My tables. Rename them any time." padding="md">
+              <Stack gap="sm">
+                {yours.map((app) => {
+                  const tables = app.installed!.inApp ?? app.installed!.tables;
+                  return (
+                    <Group key={app.key} justify="space-between" wrap="wrap" gap="sm">
+                      <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                        <AppIcon name={app.icon} size={32} />
+                        <div style={{ minWidth: 0 }}>
+                          <Text fw={500}>{app.name}</Text>
+                          <Text size="xs" c="dimmed">
+                            {tables.length ? tables.map(tableTitle).join(", ") : "No tables yet: add them from Tables & columns"}
+                          </Text>
+                        </div>
+                      </Group>
+                      <Group gap="xs">
+                        <Button size="xs" variant="default" leftSection={<IconPencil size={14} />} onClick={() => setNaming({ app })}>
+                          Rename
+                        </Button>
+                        {app.key !== "my-tables" && (
+                          <Button size="xs" variant="subtle" color="red" onClick={() => setRemoving(app)}>
+                            Remove app
+                          </Button>
+                        )}
+                      </Group>
+                    </Group>
+                  );
+                })}
+              </Stack>
+            </Section>
+          )}
+
           {installed.length > 0 && bundles.some((b) => !b.apps.every((k) => apps.find((a) => a.key === k)?.installed)) && bundleSection}
         </Stack>
       )}
 
       <InstallDrawer target={target} onClose={() => setTarget(null)} />
       <RemoveAppModal app={removing} onClose={() => setRemoving(null)} />
+      <AppNameModal opened={naming !== null} app={naming?.app ?? null} icons={data?.icons ?? []} onClose={() => setNaming(null)} />
     </Page>
   );
 }

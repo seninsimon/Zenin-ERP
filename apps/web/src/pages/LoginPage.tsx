@@ -38,7 +38,7 @@ function Logo({ size = 36 }: { size?: number }) {
   return <BrandMark size={size} nameSize="lg" />;
 }
 
-export default function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUser) => void }) {
+export default function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUser, password: string) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -56,7 +56,7 @@ export default function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUs
     setSubmitting(true);
     try {
       const { data } = await login(username.trim(), password);
-      onLoggedIn(data.user);
+      onLoggedIn(data.user, password);
     } catch (err) {
       setError(errorMessage(err, "Could not reach the server. Check your connection and try again."));
       form.setFieldValue("password", "");

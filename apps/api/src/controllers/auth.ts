@@ -91,7 +91,8 @@ export async function changePassword(req: Request, res: Response) {
   const problem = validateNewPassword(newPassword);
   if (problem) throw new HttpError(400, problem);
 
-  await updateUser(user._id, { passwordHash: await hashPassword(newPassword) });
+  // a new password of their own: the "choose a new one first" is done
+  await updateUser(user._id, { passwordHash: await hashPassword(newPassword), mustChangePassword: false });
   await deleteUserSessions(user._id, req.sessionToken); // sign out other devices
   await audit(req, { action: "password_change", entity: "user", recordId: user._id });
 

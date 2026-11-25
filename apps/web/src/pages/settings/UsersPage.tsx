@@ -22,9 +22,9 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconAlertTriangle, IconEdit, IconKey, IconListCheck, IconMail, IconPlus, IconTrash, IconUserCheck, IconUserOff, IconUsers } from "@tabler/icons-react";
+import { IconAlertTriangle, IconEdit, IconFileImport, IconKey, IconListCheck, IconMail, IconPlus, IconTrash, IconUserCheck, IconUserOff, IconUsers } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import api, { errorMessage } from "../../api/api";
 import {
@@ -42,6 +42,7 @@ import {
 import { AppIcon } from "../../features/apps/AppIcon";
 import { PersonAccessDrawer, PersonAccessSummary } from "../../features/access/PersonAccessDrawer";
 import { AccessAiBox } from "../../features/access/AccessAiBox";
+import { ImportPeopleModal } from "../../features/access/ImportPeopleModal";
 import { useTables } from "../../api/reactQueryHooks/useTables";
 import { useCurrentUser } from "../../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
@@ -546,7 +547,9 @@ export default function UsersPage() {
   const [modal, setModal] = useState<{ user: User | null } | null>(null);
   const [resetting, setResetting] = useState<User | null>(null);
   const [showing, setShowing] = useState<User | null>(null);
+  const [importing, setImporting] = useState(false);
   const { data: mail } = useEmailStatus();
+  const qc = useQueryClient();
 
   const columns = useMemo<DataTableColumn<User>[]>(
     () => [
@@ -729,6 +732,34 @@ export default function UsersPage() {
     }
   };
 
+  // ticked rows → Disable: never yourself, never the last administrator (the server skips those)
+  const disableMany = (ids: string[], clear: () => void) => {
+    const others = ids.filter((id) => id !== me._id && users.find((u) => u._id === id)?.isActive);
+    if (!others.length) {
+      notifications.show({ message: ids.includes(me._id) ? "You can't disable your own account" : "They're already disabled", color: "yellow" });
+      return;
+    }
+    confirmDanger({
+      title: `Disable ${pluralize(others.length, "person", "people")}`,
+      message: "They'll be signed out and can't sign in until you enable their accounts again. Their records stay.",
+      confirmLabel: "Disable",
+      onConfirm: async () => {
+        try {
+          const { data } = await api.post<{ message: string; skipped: { name: string; reason: string }[] }>("/users/disable", { ids: others });
+          notifications.show({
+            message: [data.message, ...data.skipped.map((s) => `${s.name}: ${s.reason}`)].join(". "),
+            color: data.skipped.length ? "yellow" : "green",
+          });
+          clear();
+        } catch (err) {
+          notifications.show({ title: "Couldn't disable them", message: errorMessage(err), color: "red" });
+        } finally {
+          qc.invalidateQueries({ queryKey: ["users"] });
+        }
+      },
+    });
+  };
+
   const askDelete = (u: User) =>
     confirmDanger({
       title: "Delete user",
@@ -747,9 +778,14 @@ export default function UsersPage() {
         help="users"
         meta={users.length ? <Badge variant="default">{pluralize(users.length, "user")}</Badge> : undefined}
         actions={
-          <Button leftSection={<IconPlus size={16} />} onClick={() => setModal({ user: null })}>
-            Add person
-          </Button>
+          <Group gap="xs">
+            <Button variant="default" leftSection={<IconFileImport size={16} />} onClick={() => setImporting(true)}>
+              Import people
+            </Button>
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setModal({ user: null })}>
+              Add person
+            </Button>
+          </Group>
         }
       />
 
@@ -767,6 +803,12 @@ export default function UsersPage() {
         searchPlaceholder="Search users…"
         storageKey="settings:users"
         onRowClick={(u) => setModal({ user: u })}
+        selectable
+        bulkActions={(ids, clear) => (
+          <Button variant="default" color="red" leftSection={<IconUserOff size={16} />} onClick={() => disableMany(ids, clear)}>
+            Disable
+          </Button>
+        )}
         rowActions={(u) => {
           const self = u._id === me._id;
           return (
@@ -819,6 +861,7 @@ export default function UsersPage() {
       <UserModal opened={modal !== null} onClose={() => setModal(null)} user={modal?.user ?? null} />
       <PersonAccessDrawer person={showing} onClose={() => setShowing(null)} />
       <ResetPasswordModal user={resetting} onClose={() => setResetting(null)} />
+      <ImportPeopleModal opened={importing} onClose={() => setImporting(false)} apps={accessOptions} />
     </Page>
   );
 }

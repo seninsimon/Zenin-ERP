@@ -97,7 +97,7 @@ export async function usePasswordLink(token: string, password: unknown) {
       client
     );
     if (!rows[0]) throw new HttpError(400, "This link has expired or was already used. Ask for a new one with \"Forgot password?\".");
-    await query(`UPDATE users SET password_hash = $2, updated_at = now() WHERE _id = $1`, [rows[0].user_id, passwordHash], client);
+    await query(`UPDATE users SET password_hash = $2, must_change_password = false, updated_at = now() WHERE _id = $1`, [rows[0].user_id, passwordHash], client);
     await query(`UPDATE password_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL`, [rows[0].user_id], client);
     return rows[0].user_id;
   });

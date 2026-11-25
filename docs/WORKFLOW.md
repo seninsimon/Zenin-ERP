@@ -69,6 +69,42 @@ It creates the apps, their levels and starter departments. Then **Add person**
 People directory installed, the same form adds their directory entry, linked
 to the login, with their department filled in.
 
+**Many people at once: Import people** (Users, `controllers/peopleImport.ts`):
+1. **Download template** (`GET /users/import/template`): Full name, Username,
+   Email, Phone, Departments, then one column per app (as in App access).
+   An app's cell is a level's name (Staff, Manager, an added level) or empty.
+   Departments are names separated by `;`.
+2. **Check file** (`POST /users/import/check {csv}`): every row with its
+   problems; nothing is saved. Problems: no Full name, a bad email, an email
+   or username already here or twice in the file, an unknown department or
+   level. An empty Username is made from the email or name (`meera.nair`,
+   then `meera.nair2`). At most 500 rows.
+3. **Add** (`POST /users/import {csv, addToDirectory}`): the good rows only.
+   - Everyone is a **Member** with the app levels from the file. Never an
+     Administrator by import.
+   - With an email, and email set up (including "Links in emails go to"):
+     the **welcome link**. Otherwise a **temporary password** (`abcd-efgh-jkmn`,
+     no look-alike characters) with `must_change_password` set.
+   - The answer carries two CSV files, made once: the temporary passwords
+     (the dialog asks before closing without downloading them) and the rows
+     not added, with a "Problem" column, to fix and import again.
+   - Each person is in the audit log (`changes.imported = true`), plus their
+     People directory entry when ticked.
+   - Gmail sends about 500 emails a day: with more than 300 welcome emails
+     the dialog suggests importing in parts.
+
+**A temporary password** (`users.must_change_password`, migration 018): until
+they choose their own, `requireAuth` answers every request with 403 "Choose a
+new password first", except `GET /auth/me` and `PUT /auth/password`. The web
+shows "Welcome, <name>: choose your own" instead of the app (it asks for the
+temporary password again only after a reload). Changing the password, or
+using a welcome/reset link, clears it.
+
+**Disable several at once** (`POST /users/disable {ids}`): tick people in the
+Users list → Disable. Never yourself, never the last active administrator
+(those come back as `skipped` with the reason). They're signed out everywhere;
+each is in the audit log.
+
 **The person dialog** prevents mistakes instead of explaining them:
 - **Administrator** is one switch; it hides App access (they can do
   everything). The API still takes `roleId` (Admin or Member).
@@ -650,7 +686,8 @@ Manager role.
   - the waiting notifications of "once a day" people.
 - **Password links** (`auth/passwordLinks.ts`, `password_tokens`, only a
   hash kept):
-  - **welcome** (Add person → "email them a link"), valid 3 days;
+  - **welcome** (Add person → "email them a link", or Import people for
+    rows with an email), valid 3 days;
   - **reset** ("Forgot your password?"), valid 1 hour;
   - single use, at most 3 an hour per person;
   - a sent one's text is blanked in the outbox.

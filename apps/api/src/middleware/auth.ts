@@ -44,6 +44,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     req.user = session.user;
     req.sessionToken = token;
+    // a temporary password (Import people): nothing but choosing a new one
+    if (session.user.mustChangePassword && !["/auth/me", "/auth/password"].includes(req.path)) {
+      throw new HttpError(403, "Choose a new password first", { _mustChangePassword: "true" });
+    }
     next();
   } catch (error) {
     next(error);

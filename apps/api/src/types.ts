@@ -141,6 +141,8 @@ export interface CurrentUser {
   email: string;
   phone: string;
   isActive: boolean;
+  // a temporary password from Import people: must choose a new one first
+  mustChangePassword: boolean;
   // "Email me": now (right away), daily (in the morning summary) or never
   emailPref: "now" | "daily" | "never";
   // profile picture ("/uploads/<key>"); "" = initials

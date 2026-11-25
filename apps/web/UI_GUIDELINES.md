@@ -269,7 +269,17 @@ tables.
   actions go in the row's **⋯ menu**, not as a row of icons. Destructive items
   are red and last.
 - **Bulk actions:** only appear when rows are selected. They replace the
-  toolbar with "N selected".
+  toolbar with "N selected". A destructive one confirms with the count
+  ("Disable 2 people") and says afterwards who was skipped and why.
+- **Importing from a file** (records: `ImportCsvModal`; people:
+  `ImportPeopleModal`):
+  - a **Download template** button and a "What goes in each column" list;
+  - people: **Check file** first, showing each row as OK or its problem, then
+    **Add N people**; nothing is saved before that. On phones the check sits
+    under each row (no sideways scrolling);
+  - the rows that failed come back as a file with a "Problem" column.
+- **Shown once** (temporary passwords): a yellow box, **Download** button, and
+  closing without downloading asks first.
 - **Alignment:**
   - numbers right-aligned with `tabular-nums`;
   - text left-aligned;

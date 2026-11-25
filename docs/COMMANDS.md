@@ -209,6 +209,8 @@ These are set in the ERP, under **Administration**. No `.env` editing.
 | Team chat and comments on records | **Chat** (team chat is off until you switch it on) |
 | AI (Beta): drafting apps, Ask Zenin, change access with AI (Users page) | **AI**: choose Claude, Gemini or ChatGPT, paste the key, **Test**. The same page shows the estimated cost and sets limits |
 | People (Administrator, App access), what each level can do, teams | **Users**, **Access levels**, **Departments** |
+| Many people at once (up to 500 per CSV file) | **Users** → **Import people**: download the template, fill it in, **Check file**, **Add** |
+| Disable several people at once | **Users**: tick them → **Disable** |
 
 ---
 

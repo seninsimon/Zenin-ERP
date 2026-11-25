@@ -199,3 +199,104 @@ export function SetPasswordPage() {
     </Shell>
   );
 }
+
+// After signing in with a temporary password (from "Import people"): choose
+// your own before anything else. The temporary one is asked for only when
+// it isn't known (a reload of this page).
+export function ChoosePasswordPage({
+  name,
+  username,
+  temporaryPassword,
+  onDone,
+  onLogout,
+}: {
+  name: string;
+  username: string;
+  temporaryPassword: string | null;
+  onDone: () => unknown;
+  onLogout: () => unknown;
+}) {
+  const [current, setCurrent] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 8) return setError("Use at least 8 characters");
+    if (password !== repeat) return setError("The two passwords don't match");
+    const currentPassword = temporaryPassword ?? current;
+    if (password === currentPassword) return setError("Choose a new password, not the temporary one");
+    setSaving(true);
+    setError(null);
+    try {
+      await api.put("/auth/password", { currentPassword, newPassword: password });
+      await onDone();
+    } catch (err) {
+      setError(errorMessage(err));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Shell
+      back={false}
+      title={`Welcome, ${name.split(/\s+/)[0]}`}
+      intro={
+        <>
+          Your username is <b>{username}</b>. You signed in with a temporary password: choose your own to start. Use one you don't use anywhere else.
+        </>
+      }
+    >
+      <form onSubmit={submit} noValidate>
+        <Stack gap="md">
+          {error && (
+            <Alert color="red" icon={<IconAlertCircle size={16} />} role="alert">
+              {error}
+            </Alert>
+          )}
+          {temporaryPassword === null && (
+            <PasswordInput
+              label="Temporary password"
+              description="The one you were given"
+              leftSection={<IconLock size={16} />}
+              autoComplete="current-password"
+              autoFocus
+              size="md"
+              value={current}
+              onChange={(e) => setCurrent(e.currentTarget.value)}
+              visibilityToggleButtonProps={{ "aria-label": "Show or hide password" }}
+            />
+          )}
+          <PasswordInput
+            label="New password"
+            description="At least 8 characters"
+            leftSection={<IconLock size={16} />}
+            autoComplete="new-password"
+            autoFocus={temporaryPassword !== null}
+            size="md"
+            value={password}
+            onChange={(e) => setPassword(e.currentTarget.value)}
+            visibilityToggleButtonProps={{ "aria-label": "Show or hide password" }}
+          />
+          <PasswordInput
+            label="Type it again"
+            leftSection={<IconLock size={16} />}
+            autoComplete="new-password"
+            size="md"
+            value={repeat}
+            onChange={(e) => setRepeat(e.currentTarget.value)}
+            visibilityToggleButtonProps={{ "aria-label": "Show or hide password" }}
+          />
+          <Button type="submit" loading={saving} fullWidth size="md">
+            Save and continue
+          </Button>
+          <Button variant="subtle" color="gray" onClick={() => onLogout()}>
+            Sign out
+          </Button>
+        </Stack>
+      </form>
+    </Shell>
+  );
+}

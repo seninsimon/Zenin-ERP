@@ -9,7 +9,7 @@ const hashToken = (token: string) => createHash("sha256").update(token).digest("
 
 // user + main role + extra (app) roles + departments
 const USER_SELECT = `
-  SELECT u._id, u.username, u.full_name, u.email, u.phone, u.is_active,
+  SELECT u._id, u.username, u.full_name, u.email, u.phone, u.is_active, u.must_change_password,
          u.last_login_at, u.created_at, u.updated_at, u.email_pref, u.avatar_url,
          r._id AS role_id, r.name AS role_name, r.is_admin, r.permissions,
          COALESCE((
@@ -33,6 +33,7 @@ type UserRow = {
   email: string;
   phone: string;
   is_active: boolean;
+  must_change_password: boolean;
   last_login_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -53,6 +54,7 @@ const toUser = (row: UserRow): CurrentUser => ({
   email: row.email,
   phone: row.phone,
   isActive: row.is_active,
+  mustChangePassword: row.must_change_password ?? false,
   emailPref: (row.email_pref ?? "now") as CurrentUser["emailPref"],
   avatarUrl: row.avatar_url ?? "",
   lastLoginAt: row.last_login_at,
@@ -169,6 +171,8 @@ export interface UserInput {
   departmentIds?: string[];
   // extra roles (app roles); undefined = keep
   extraRoleIds?: string[];
+  // a temporary password (Import people): choose a new one at first sign-in
+  mustChangePassword?: boolean;
 }
 
 const setUserRoles = async (db: Db, userId: string, roleIds: string[]) => {
@@ -197,8 +201,8 @@ const setUserDepartments = async (db: Db, userId: string, departmentIds: string[
 export async function createUser(data: UserInput & { username: string; passwordHash: string; roleId: string }) {
   const id = await withTransaction(async (client) => {
     const { rows } = await query<{ _id: string }>(
-      `INSERT INTO users (username, full_name, email, phone, password_hash, role_id, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING _id`,
+      `INSERT INTO users (username, full_name, email, phone, password_hash, role_id, is_active, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING _id`,
       [
         data.username,
         data.fullName ?? "",
@@ -207,6 +211,7 @@ export async function createUser(data: UserInput & { username: string; passwordH
         data.passwordHash,
         data.roleId,
         data.isActive ?? true,
+        data.mustChangePassword ?? false,
       ],
       client
     );
@@ -227,6 +232,7 @@ export async function updateUser(id: string, data: UserInput) {
     ["passwordHash", "password_hash"],
     ["roleId", "role_id"],
     ["isActive", "is_active"],
+    ["mustChangePassword", "must_change_password"],
     ["emailPref", "email_pref"],
     ["avatarUrl", "avatar_url"],
   ];

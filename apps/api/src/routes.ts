@@ -8,6 +8,7 @@ import * as jobs from "./controllers/jobs.js";
 import * as records from "./controllers/records.js";
 import * as apps from "./controllers/apps.js";
 import * as levels from "./controllers/levels.js";
+import * as peopleImport from "./controllers/peopleImport.js";
 import * as email from "./controllers/email.js";
 import * as ai from "./controllers/ai.js";
 import * as branding from "./controllers/branding.js";
@@ -50,6 +51,11 @@ r.get("/departments/options", requireAuth, handle(departmentOptionsHandler));
 // ---- users / roles / departments (admin) ----
 r.get("/users", adminOnly, handle(admin.getUsers));
 r.get("/users/app-access", adminOnly, handle(admin.getAppAccessOptions));
+// "Import people" from a CSV file, and disabling several people at once
+r.get("/users/import/template", adminOnly, handle(peopleImport.importTemplateHandler));
+r.post("/users/import/check", adminOnly, handle(peopleImport.importCheckHandler));
+r.post("/users/import", adminOnly, handle(peopleImport.importPeopleHandler));
+r.post("/users/disable", adminOnly, handle(peopleImport.disableUsersHandler));
 r.post("/users", adminOnly, handle(admin.createUserHandler));
 r.put("/users/:id", adminOnly, handle(admin.updateUserHandler));
 r.delete("/users/:id", adminOnly, handle(admin.deleteUserHandler));

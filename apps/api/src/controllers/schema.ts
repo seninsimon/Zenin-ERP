@@ -131,6 +131,7 @@ export async function updateTableSettingsHandler(req: Request, res: Response) {
   const schema = await updateTableSettings(tableName, {
     showInMenu: req.body?.showInMenu,
     byDepartment: req.body?.byDepartment,
+    spreadsheet: req.body?.spreadsheet,
     departmentIds,
   });
   await audit(req, {
@@ -140,6 +141,7 @@ export async function updateTableSettingsHandler(req: Request, res: Response) {
     changes: {
       showInMenu: schema.showInMenu,
       recordsSeenBy: schema.byDepartment ? "each department" : "everyone with access",
+      spreadsheet: schema.spreadsheet,
       departments: schema.departments.map((d) => d.name),
     },
   });

@@ -794,6 +794,48 @@ in the web app `features/chat/`, `pages/ChatPage.tsx` and
 - **Totals:** above `EXACT_COUNT_LIMIT` rows (default 50,000) the total is an
   estimate; the UI shows "~".
 
+### The Spreadsheet view
+
+A table's records as a grid, like Excel (`features/records/SpreadsheetView.tsx`,
+react-data-grid 7). An admin switches it on per table: Tables → the table →
+Access → **Spreadsheet view** (`table_schemas.spreadsheet`, migration 017;
+`PUT /schema/:table { spreadsheet }`). There's no separate "who may use
+it": people see and change what their level allows, and hidden fields never
+appear. Phones don't get it (`?view=sheet` falls back to the list).
+- **Rows:** `GET /table/:t?withRaw=1` gives the usual names to show and, in
+  `_raw`, the stored values (ids) to edit and compare, hidden fields left out.
+  100 rows a page, with the list's search, filters and sort.
+- **Editing:** click a cell and type (typing replaces the value, as in Excel;
+  Enter or a double click edits it). The editor is the form's own
+  `FieldInput`, so every type works as in the form; pickers (choice, person,
+  link, department, yes/no, date) save as soon as something is picked.
+  Formulas, totals, auto-numbers, files, pictures, rich text and line items
+  are read-only; the first column opens the record.
+- **Each cell saves on its own** with `PUT /table/:t/:id { field: value,
+  _expected: { field: <the value it started from> } }`. If the stored value
+  differs, the server refuses (409, `errors._cellConflict`, `_by`) and
+  nothing is overwritten. The sheet shows "Asha changed In stock on Air filter
+  a moment ago" with **Keep theirs** / **Use mine** (Use mine saves again from
+  the value now stored). Empty values count as the same (`null`, `""`, `[]`).
+  `_expected` on a hidden field is refused (403): comparing would reveal it.
+- **Problems** turn the cell red, with the reason on hover. A tick-green
+  outline means saved.
+- **New rows:** **Add row** adds a draft at the bottom. It's saved (`POST`)
+  once its required fields are filled. On a table split by department, a
+  person in several departments gets new rows in their first; the sheet says
+  so.
+- **Paste** (`pasteValues.ts`): text copied from Excel or Google Sheets (tabs
+  and new lines, quoted cells) fills from the active cell rightwards and
+  down, up to 200 rows. Each value becomes what the field stores (numbers
+  like "1,250", dates as 2026-11-25 or 25/11/2026, yes/no, choice labels,
+  people, links and departments by name). Each row is one normal save, with
+  `_expected` for the cells it changes; rows past the end become new records.
+  A notification sums it up; problem cells turn red.
+- **Live:** others' changes (`useLiveChanges`) refresh the sheet at once; the
+  cell being edited keeps its editor (`closeOnExternalRowChange: false`).
+  While the live stream is held back (`useLiveHeldBack`, e.g. the Quick
+  Tunnel), the sheet checks every 5 s.
+
 ### Changing many records at once (bulk update)
 
 - **On a list:** select rows → **Update** → choose a field → give the value

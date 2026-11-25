@@ -143,7 +143,16 @@ export async function listHandler(req: Request, res: Response) {
 
   const page = intParam(req.query.page, 1, 1, 1_000_000);
   const limit = intParam(req.query.limit, 10, 1, 500);
-  const query: ListQuery = { search: req.query.search, filters: req.query.filters, sort: req.query.sort, order: req.query.order, page, limit };
+  const query: ListQuery = {
+    search: req.query.search,
+    filters: req.query.filters,
+    sort: req.query.sort,
+    order: req.query.order,
+    page,
+    limit,
+    // the Spreadsheet view: each row's stored values too (ids, not names), to edit
+    withRaw: req.query.withRaw === "1",
+  };
 
   // ?raw=1: stored values (ids, not names), e.g. for editing line items
   if (req.query.raw === "1") {
@@ -162,7 +171,7 @@ export async function listHandler(req: Request, res: Response) {
   res.json({ ...(await listForUser(user, schema, query)), page, limit });
 }
 
-export type ListQuery = { search?: unknown; filters?: unknown; sort?: unknown; order?: unknown; page: number; limit: number };
+export type ListQuery = { search?: unknown; filters?: unknown; sort?: unknown; order?: unknown; page: number; limit: number; withRaw?: boolean };
 
 const listOptions = (user: CurrentUser, schema: TableSchema, q: ListQuery): ListOptions => {
   const filters = parseFilters(q.filters, schema, user);
@@ -262,6 +271,7 @@ export async function listForUser(user: CurrentUser, schema: TableSchema, q: Lis
           : relationLabel(labels, value);
       } else out[column.name] = value ?? null;
     }
+    if (q.withRaw) out._raw = Object.fromEntries(columns.map((c) => [c.name, row.data[c.name] ?? null]));
     if (withDepartment) {
       out._department = visibleToNames(schema, row) ?? "Admins only";
       out._departmentId = row.departmentId;
@@ -502,6 +512,10 @@ export async function createHandler(req: Request, res: Response) {
   res.json({ message: "Data inserted successfully", data: { acknowledged: true, insertedId: id } });
 }
 
+// empty is empty: null, "", [] and a missing value are the same
+const emptyish = (v: unknown) => v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length);
+const sameValue = (a: unknown, b: unknown) => (emptyish(a) && emptyish(b)) || JSON.stringify(a) === JSON.stringify(b);
+
 export async function updateHandler(req: Request, res: Response) {
   const user = currentUser(req);
   const schema = await loadTable(req, "edit");
@@ -512,8 +526,14 @@ export async function updateHandler(req: Request, res: Response) {
   // the version the form started from (its _updatedAt); not sent = no check
   const expectedUpdatedAt = payload._expectedUpdatedAt;
   delete payload._expectedUpdatedAt;
+  // the Spreadsheet view: the values its cells started from ({ qty: 4 }); if
+  // one changed meanwhile, nothing is overwritten (409 _cellConflict)
+  const expected = payload._expected && typeof payload._expected === "object" ? (payload._expected as Record<string, unknown>) : null;
+  delete payload._expected;
 
   assertCanWrite(user, schema, payload);
+  // comparing with a hidden field would reveal it
+  assertCanWrite(user, schema, expected);
   const hidden = hiddenColumns(user, schema);
   const { values, errors } = coerceValues(schema, payload);
   throwIfErrors(errors);
@@ -526,6 +546,16 @@ export async function updateHandler(req: Request, res: Response) {
     if (!preview && typeof expectedUpdatedAt === "string" && current.updatedAt && new Date(expectedUpdatedAt).getTime() !== current.updatedAt.getTime()) {
       const by = await lastEditor(schema.tableName, id, client);
       throw new HttpError(409, `${by ?? "Someone"} changed this record while you were editing it`, { _conflict: by ?? "Someone" });
+    }
+    for (const [field, was] of Object.entries(preview ? {} : (expected ?? {}))) {
+      const column = schema.columns.find((c) => c.name === field);
+      if (!column || sameValue(current.data[field], was)) continue;
+      const by = (await lastEditor(schema.tableName, id, client)) ?? "Someone";
+      throw new HttpError(409, `${by} changed ${column.label || column.name} a moment ago`, {
+        _cellConflict: field,
+        _by: by,
+        [field]: `${by} changed this a moment ago`,
+      });
     }
 
     const newDepartments = resolveDepartments(user, schema, payload, false, current);

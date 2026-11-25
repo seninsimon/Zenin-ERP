@@ -96,13 +96,15 @@ export const getTableData = (
     filters?: ListFilter[];
     // stored values (ids, not names): for editing line items
     raw?: boolean;
+    // names to show and, in _raw, the stored values (the Spreadsheet view)
+    withRaw?: boolean;
   }
 ) => {
-  const { filters, raw, ...rest } = params;
+  const { filters, raw, withRaw, ...rest } = params;
   // only field/op/value(2) go to the server (chips may carry display labels)
   const clean = filters?.map(({ field, op, value, value2 }) => ({ field, op, value, value2 }));
   return api.get(`/table/${encodeURIComponent(table)}`, {
-    params: { ...rest, ...(raw ? { raw: 1 } : {}), ...(clean?.length ? { filters: JSON.stringify(clean) } : {}) },
+    params: { ...rest, ...(raw ? { raw: 1 } : {}), ...(withRaw ? { withRaw: 1 } : {}), ...(clean?.length ? { filters: JSON.stringify(clean) } : {}) },
   });
 };
 

@@ -77,6 +77,8 @@ export interface TableSchemaInfo {
   allowedDepartments?: Department[];
   // "who sees the records": false = everyone who can use the table (no "Visible to")
   byDepartment?: boolean;
+  // the Spreadsheet view is switched on for this table
+  spreadsheet?: boolean;
   // "own only" access: the fields that make a record yours, locked to you in the
   // form (missing: you're not in the People directory yet, and why)
   ownFields?: { column: string; value: string | null; label: string; missing?: string }[];

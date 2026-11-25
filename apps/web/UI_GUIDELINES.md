@@ -386,6 +386,12 @@ Formatting helpers live in `src/lib/format.ts`.
 
 ---
 
+- **Old code in an open tab** (after an update, or a dev server restart): a
+  page whose code loads on demand can fail to load, or crash with two copies
+  of React. `lib/reloadOnce.ts` reloads once by itself ("Loading the latest
+  version…"), from `ErrorBoundary` and Vite's `vite:preloadError`; a second
+  failure within a minute shows the error screen with its technical details.
+
 ## 9. Writing (UI copy)
 
 - **Case:**
@@ -504,6 +510,7 @@ Target: **WCAG 2.2 AA**.
 | Record values | `FieldValue` |
 | Nothing to show | `EmptyState` |
 | Explain an idea that isn't obvious | `HelpTip` / `WithHelp`, text in `lib/help.ts` (§9) |
+| Editing many records like a spreadsheet | `SpreadsheetView` (react-data-grid): Zenin's colours through the `--rdg-*` variables (`spreadsheet.module.css`), `rdg-dark` / `rdg-light` from the colour scheme, the form's `FieldInput` as the cell editor, per-cell states (saving, saved, error) as cell classes, one clash banner at a time |
 | Settings for many things × many options (access levels) | One thing at a time (a list on the left, a dropdown on phones), a grid with a sticky first column and `scope="col"` headers, changed cells outlined, one save bar with a count (`AccessLevelsPage.tsx`) |
 | Delete/disable confirmation | `confirmDanger` |
 | Dates, numbers, file names | `lib/format.ts` |

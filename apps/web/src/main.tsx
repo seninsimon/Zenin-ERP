@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { reloadOnce } from "./lib/reloadOnce";
 import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { notificationsStore } from "@mantine/notifications";
@@ -36,6 +37,11 @@ const queryClient = new QueryClient({
       staleTime: 15_000,
     },
   },
+});
+
+// a page's code that fails to load in an open tab (after an update): reload once
+window.addEventListener("vite:preloadError", (event) => {
+  if (reloadOnce()) event.preventDefault();
 });
 
 createRoot(document.getElementById("root")!).render(

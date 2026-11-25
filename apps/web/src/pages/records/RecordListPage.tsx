@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMediaQuery } from "@mantine/hooks";
+import { lazy, Suspense, useMemo, useState } from "react";
 import {
   ActionIcon,
+  Loader,
   Alert,
   Anchor,
   Badge,
@@ -20,6 +22,7 @@ import { notifications } from "@mantine/notifications";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   IconCalendarMonth,
+  IconFileSpreadsheet,
   IconChevronDown,
   IconDots,
   IconDownload,
@@ -58,6 +61,8 @@ import { formatDateTime, formatNumber, pluralize } from "../../lib/format";
 import { readJson } from "../../lib/storage";
 import { BoardView } from "../../features/records/BoardView";
 import { CalendarView } from "../../features/records/CalendarView";
+// the grid library loads only when someone opens the Spreadsheet view
+const SpreadsheetView = lazy(() => import("../../features/records/SpreadsheetView").then((m) => ({ default: m.SpreadsheetView })));
 import { BulkUpdateModal } from "../../features/records/BulkUpdateModal";
 import { ImportCsvModal } from "../../features/records/ImportCsvModal";
 import { NoTableAccess } from "../../features/records/states";
@@ -137,8 +142,17 @@ export default function RecordListPage() {
   const boardColumns = (schema?.columns ?? []).filter((c) => c.type === "choice" && !c.multiple);
   const dateColumns = (schema?.columns ?? []).filter((c) => c.type === "date");
   const requested = params.get("view");
-  const view: "table" | "board" | "calendar" =
-    requested === "board" && boardColumns.length ? "board" : requested === "calendar" && dateColumns.length ? "calendar" : "table";
+  // Spreadsheet: when an admin switched it on for this table; not on phones
+  const narrow = useMediaQuery("(max-width: 48em)");
+  const sheetOn = Boolean(schema?.spreadsheet) && !narrow;
+  const view: "table" | "board" | "calendar" | "sheet" =
+    requested === "board" && boardColumns.length
+      ? "board"
+      : requested === "calendar" && dateColumns.length
+        ? "calendar"
+        : requested === "sheet" && sheetOn
+          ? "sheet"
+          : "table";
   const groupBy = boardColumns.find((c) => c.name === params.get("by")) ?? boardColumns[0];
   const dateColumn = dateColumns.find((c) => c.name === params.get("on")) ?? dateColumns[0];
   const setViewParam = (key: string, value: string | null) =>
@@ -396,7 +410,7 @@ export default function RecordListPage() {
         actions={
           schema && (
             <>
-              {(boardColumns.length > 0 || dateColumns.length > 0) && (
+              {(boardColumns.length > 0 || dateColumns.length > 0 || sheetOn) && (
                 <SegmentedControl
                   aria-label="View"
                   value={view}
@@ -405,6 +419,7 @@ export default function RecordListPage() {
                     { value: "table", label: <ViewLabel icon={IconTable} text="Table" /> },
                     ...(boardColumns.length ? [{ value: "board", label: <ViewLabel icon={IconLayoutKanban} text="Board" /> }] : []),
                     ...(dateColumns.length ? [{ value: "calendar", label: <ViewLabel icon={IconCalendarMonth} text="Calendar" /> }] : []),
+                    ...(sheetOn ? [{ value: "sheet", label: <ViewLabel icon={IconFileSpreadsheet} text="Spreadsheet" /> }] : []),
                   ]}
                 />
               )}
@@ -638,6 +653,18 @@ export default function RecordListPage() {
             )}
             {schema && view === "calendar" && dateColumn && (
               <CalendarView table={table} schema={schema} dateColumn={dateColumn} search={url.search} filters={url.filters} />
+            )}
+            {schema && view === "sheet" && (
+              <Suspense fallback={<Loader size="sm" />}>
+                <SpreadsheetView
+                table={table}
+                schema={schema}
+                search={url.search}
+                filters={url.filters}
+                  sort={url.sort?.id}
+                  order={url.sort ? (url.sort.desc ? "desc" : "asc") : undefined}
+                />
+              </Suspense>
             )}
           </Stack>
         </Box>

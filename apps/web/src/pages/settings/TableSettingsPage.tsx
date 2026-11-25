@@ -56,6 +56,7 @@ type Schema = {
   columns: SchemaColumn[];
   showInMenu: boolean;
   byDepartment?: boolean;
+  spreadsheet?: boolean;
   departments: { _id: string; name: string }[];
   unassignedCount?: number;
   // the app it's in (My tables when it has none); blueprintKey: it came with that app
@@ -152,6 +153,7 @@ function AccessSection({ schema }: { schema: Schema }) {
   const [departmentIds, setDepartmentIds] = useState<string[]>([]);
   const [showInMenu, setShowInMenu] = useState(true);
   const [byDepartment, setByDepartment] = useState(true);
+  const [spreadsheet, setSpreadsheet] = useState(false);
   const [assignTo, setAssignTo] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
 
@@ -159,11 +161,13 @@ function AccessSection({ schema }: { schema: Schema }) {
     setDepartmentIds(schema.departments.map((d) => d._id));
     setShowInMenu(schema.showInMenu !== false);
     setByDepartment(schema.byDepartment !== false);
+    setSpreadsheet(Boolean(schema.spreadsheet));
   }, [schema]);
 
   const dirty =
     showInMenu !== (schema.showInMenu !== false) ||
     byDepartment !== (schema.byDepartment !== false) ||
+    spreadsheet !== Boolean(schema.spreadsheet) ||
     [...departmentIds].sort().join() !== schema.departments.map((d) => d._id).sort().join();
 
   // split by department needs one: the server refuses it too
@@ -195,7 +199,7 @@ function AccessSection({ schema }: { schema: Schema }) {
         <Button
           disabled={!dirty || noDepartment}
           loading={save.isPending}
-          onClick={() => save.mutate({ table: schema.tableName, data: { showInMenu, byDepartment, departmentIds } })}
+          onClick={() => save.mutate({ table: schema.tableName, data: { showInMenu, byDepartment, spreadsheet, departmentIds } })}
         >
           Save access
         </Button>
@@ -237,6 +241,12 @@ function AccessSection({ schema }: { schema: Schema }) {
             clearable
           />
         )}
+        <Switch
+          label={<WithHelp topic="spreadsheet">Spreadsheet view</WithHelp>}
+          description="Edit records like in Excel: type in cells, paste rows. Everyone keeps only the access they have."
+          checked={spreadsheet}
+          onChange={(e) => setSpreadsheet(e.currentTarget.checked)}
+        />
         <Switch
           label="Show in the sidebar"
           description="Hidden tables still work in links, relations and the command palette."

@@ -29,6 +29,26 @@ const push = (c: LiveChange) => {
   listeners.forEach((l) => l());
 };
 
+// Whether the live stream is held back and Zenin is checking every few
+// seconds instead (the Spreadsheet view then refreshes on its own)
+let checkingInstead = false;
+const pollListeners = new Set<() => void>();
+const setChecking = (on: boolean) => {
+  if (checkingInstead === on) return;
+  checkingInstead = on;
+  pollListeners.forEach((l) => l());
+};
+export const useLiveHeldBack = () =>
+  useSyncExternalStore(
+    (l) => {
+      pollListeners.add(l);
+      return () => {
+        pollListeners.delete(l);
+      };
+    },
+    () => checkingInstead
+  );
+
 // Changes by others to this table (or this record) since `since`.
 export function useLiveChanges(table: string, since: number, id?: string): LiveChange[] {
   const all = useSyncExternalStore(subscribe, () => changes);
@@ -113,6 +133,7 @@ export function useLiveConnection(meId: string) {
     };
     const startPolling = () => {
       if (polling || closed) return;
+      setChecking(true);
       const tick = async () => {
         await pollOnce();
         if (!closed && polling) polling = setTimeout(tick, document.visibilityState === "visible" ? POLL_MS : POLL_HIDDEN_MS);
@@ -122,6 +143,7 @@ export function useLiveConnection(meId: string) {
     const stopPolling = () => {
       if (polling) clearTimeout(polling);
       polling = null;
+      setChecking(false);
       seenNotices = null;
       unread = null;
     };

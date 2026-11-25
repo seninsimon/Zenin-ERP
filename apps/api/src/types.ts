@@ -101,6 +101,8 @@ export interface TableSchema {
   // person needs one of the table's departments); false = everyone whose
   // role can use the table
   byDepartment: boolean;
+  // the Spreadsheet view is on for this table (an admin's switch)
+  spreadsheet: boolean;
   // set on tables an app created: "projects.tasks", and the app ("projects")
   blueprintKey: string | null;
   appKey: string | null;

@@ -202,6 +202,7 @@ These are set in the ERP, under **Administration**. No `.env` editing.
 
 | What | Where |
 |---|---|
+| A Spreadsheet view for a table (edit like Excel, paste rows) | **Tables & columns** → the table → Access → **Spreadsheet view** |
 | Apps (HR, Projects, Clinic…), or your own (**New app**) | **Manage apps**. A new table asks which app it goes in |
 | ERP name and logo | **Branding** (everyone sets their own picture in **My profile**) |
 | Email (notifications, password links, morning summary) | **Email**: choose Gmail, enter the address and its 16-letter app password, **Send a test email** |

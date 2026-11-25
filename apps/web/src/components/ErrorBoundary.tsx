@@ -1,9 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Box, Button, Center, Code, Collapse, Group, Stack, Text, ThemeIcon, Title, UnstyledButton } from "@mantine/core";
 import { IconAlertTriangle, IconChevronDown, IconHome, IconRefresh } from "@tabler/icons-react";
+import { isStaleCodeError, reloadOnce } from "../lib/reloadOnce";
 
 type Props = { children: ReactNode };
-type State = { error: Error | null; showDetails: boolean };
+type State = { error: Error | null; showDetails: boolean; reloading?: boolean };
 
 // Last-resort crash screen for render errors anywhere in the app.
 export default class ErrorBoundary extends Component<Props, State> {
@@ -15,11 +16,22 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Unhandled UI error:", error, info.componentStack);
+    // an open tab with old code (after an update): a fresh load fixes it, once
+    if (isStaleCodeError(error) && reloadOnce()) this.setState({ reloading: true });
   }
 
   render() {
-    const { error, showDetails } = this.state;
+    const { error, showDetails, reloading } = this.state;
     if (!error) return this.props.children;
+    if (reloading) {
+      return (
+        <Center mih="100dvh" bg="var(--app-bg)">
+          <Text size="sm" c="dimmed">
+            Loading the latest version…
+          </Text>
+        </Center>
+      );
+    }
 
     return (
       <Center mih="100dvh" bg="var(--app-bg)" p="md">

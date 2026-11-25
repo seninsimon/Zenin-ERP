@@ -30,6 +30,7 @@ type SchemaRow = {
   columns: (Partial<Column> & Record<string, unknown>)[];
   show_in_menu: boolean;
   by_department: boolean;
+  spreadsheet: boolean;
   blueprint_key: string | null;
   app_key: string | null;
   departments: { _id: string; name: string }[];
@@ -45,6 +46,7 @@ const toSchema = (row: SchemaRow): TableSchema => ({
   showInMenu: row.show_in_menu,
   departments: row.departments ?? [],
   byDepartment: row.by_department ?? true,
+  spreadsheet: row.spreadsheet ?? false,
   blueprintKey: row.blueprint_key ?? null,
   appKey: row.app_key ?? null,
   createdAt: row.created_at,
@@ -274,18 +276,19 @@ export async function deleteColumn(tableName: string, columnName: string) {
   return { schema, removed: removed! };
 }
 
-// settings: { showInMenu?, byDepartment?, departmentIds? }
+// settings: { showInMenu?, byDepartment?, spreadsheet?, departmentIds? }
 export async function updateTableSettings(
   tableName: string,
-  settings: { showInMenu?: unknown; byDepartment?: unknown; departmentIds?: string[] }
+  settings: { showInMenu?: unknown; byDepartment?: unknown; spreadsheet?: unknown; departmentIds?: string[] }
 ) {
   const flag = (v: unknown) => (typeof v === "boolean" ? v : null);
   const updated = await withTransaction(async (client) => {
     const { rowCount } = await query(
       `UPDATE table_schemas
-       SET show_in_menu = COALESCE($2, show_in_menu), by_department = COALESCE($3, by_department), updated_at = now()
+       SET show_in_menu = COALESCE($2, show_in_menu), by_department = COALESCE($3, by_department),
+           spreadsheet = COALESCE($4, spreadsheet), updated_at = now()
        WHERE table_name = $1`,
-      [tableName, flag(settings.showInMenu), flag(settings.byDepartment)],
+      [tableName, flag(settings.showInMenu), flag(settings.byDepartment), flag(settings.spreadsheet)],
       client
     );
     if (!rowCount) return false;

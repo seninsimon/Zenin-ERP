@@ -67,6 +67,14 @@ export const HELP = {
     ],
     example: "Salary, for Managers only. Staff still see the rest of the employee record.",
   },
+  spreadsheet: {
+    title: "Spreadsheet view",
+    text: [
+      "Adds a Spreadsheet view to this table: click a cell and type, Enter saves; paste rows from Excel or Google Sheets. Several people can work at once.",
+      "Every value is checked like a normal save, and people change only what their level allows. If two people change the same cell, nothing is overwritten: the second is asked.",
+    ],
+    example: "A price list or stock count that people update all day.",
+  },
   sameAccess: {
     title: "Same access as…",
     text: ["Copies another person's departments and app levels into this form. Nothing is saved until you press Save.", "It never copies Administrator."],

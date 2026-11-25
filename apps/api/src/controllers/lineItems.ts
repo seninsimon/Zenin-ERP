@@ -1,3 +1,4 @@
+import { assertCanWrite, hiddenColumns, withoutHidden } from "../auth/fields.js";
 import type { Request } from "express";
 import type pg from "pg";
 import { can, recordScope } from "../auth/access.js";
@@ -27,7 +28,7 @@ import type { CurrentUser, RecordData, TableSchema } from "../types.js";
 type ChildOps = { create?: Record<string, unknown>[]; update?: (Record<string, unknown> & { _id?: unknown })[]; delete?: unknown[] };
 
 // What a preview save worked out: the record and its lines (in order).
-export async function readBack(parent: TableSchema, id: string, client: pg.PoolClient) {
+export async function readBack(parent: TableSchema, id: string, client: pg.PoolClient, user: CurrentUser) {
   const { rows } = await query<{ data: RecordData }>(`SELECT data FROM ${dataTable(parent.tableName)} WHERE _id = $1`, [id], client);
   const lines: Record<string, (RecordData & { _id: string })[]> = {};
   for (const { schema, link } of await inlineChildren(parent.tableName)) {
@@ -36,9 +37,11 @@ export async function readBack(parent: TableSchema, id: string, client: pg.PoolC
       [[id]],
       client
     );
-    lines[schema.tableName] = found.rows.map((r) => ({ ...r.data, _id: r._id }));
+    // fields hidden from the person stay hidden in the preview too
+    const hiddenHere = hiddenColumns(user, schema);
+    lines[schema.tableName] = found.rows.map((r) => ({ ...withoutHidden(r.data, hiddenHere), _id: r._id }));
   }
-  return { data: rows[0]?.data ?? {}, lines };
+  return { data: withoutHidden(rows[0]?.data ?? {}, hiddenColumns(user, parent)), lines };
 }
 
 // Lines go with their parent: deleting an invoice deletes its lines.
@@ -115,9 +118,10 @@ export async function saveChildren(
     const created: { i: number; values: RecordData }[] = [];
     for (const [i, line] of (ops.create ?? []).entries()) {
       need("create");
+      assertCanWrite(user, schema, line);
       const { values, errors: fieldErrors } = coerceValues(schema, withDefaults(schema, own(line ?? {}), user));
       values[link.name] = parentId;
-      rowErrors("create", i, { ...fieldErrors, ...(opts.preview ? {} : checkRequired(schema, values)), ...checkChoices(schema, values, {}, user) });
+      rowErrors("create", i, { ...fieldErrors, ...(opts.preview ? {} : checkRequired(schema, values, hiddenColumns(user, schema))), ...checkChoices(schema, values, {}, user) });
       rowErrors("create", i, await checkRelations(user, schema, withoutLink(values)));
       created.push({ i, values });
     }
@@ -132,11 +136,12 @@ export async function saveChildren(
         errors[key("update", i, "_id")] = "Line not found";
         continue;
       }
+      assertCanWrite(user, schema, line);
       const { values, errors: fieldErrors } = coerceValues(schema, own(line));
       const merged = { ...current.data, ...values };
       rowErrors("update", i, {
         ...fieldErrors,
-        ...(opts.preview ? {} : checkRequired(schema, merged)),
+        ...(opts.preview ? {} : checkRequired(schema, merged, hiddenColumns(user, schema))),
         ...checkChoices(schema, values, current.data, user),
       });
       rowErrors("update", i, await checkRelations(user, schema, values, current.data));

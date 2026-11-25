@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import { ask, canAsk } from "../ai/assistant.js";
+import { applyAccess, askAccess, canUseAccessAi } from "../ai/accessAssistant.js";
+import { HttpError } from "../lib/http.js";
 import { testAi } from "../ai/generate.js";
 import { usageOverview } from "../ai/usage.js";
 import { isAdmin } from "../auth/access.js";
@@ -54,4 +56,30 @@ export async function assistantHandler(req: Request, res: Response) {
 // POST /ai/ask { turns: [{ role, content }] }: the answer to the last question
 export async function askHandler(req: Request, res: Response) {
   res.json(await ask(currentUser(req), (req.body ?? {}).turns));
+}
+
+/* ---------------- Change access with AI (admins) ---------------- */
+
+// GET /ai/access: whether the Users page shows "Tell Zenin what to change"
+export async function accessAvailableHandler(req: Request, res: Response) {
+  res.json({ available: await canUseAccessAi(currentUser(req)) });
+}
+
+// POST /ai/access { turns }: an answer, and maybe a suggestion with its preview (nothing saved)
+export async function accessAskHandler(req: Request, res: Response) {
+  res.json(await askAccess(currentUser(req), req.body?.turns));
+}
+
+// POST /ai/access/apply { summary, changes }: the admin applies a suggestion
+export async function accessApplyHandler(req: Request, res: Response) {
+  if (!(await canUseAccessAi(currentUser(req)))) throw new HttpError(403, "Change access with AI isn't switched on.");
+  const preview = await applyAccess(req.body ?? {}, async (change, text) => {
+    await audit(req, {
+      action: "update",
+      entity: change.kind === "set_level_rights" || change.kind === "add_level" ? "role" : "user",
+      recordId: "person_id" in change ? change.person_id : `${change.app}`,
+      changes: { madeWithAi: true, change: text },
+    });
+  });
+  res.json({ message: "Applied", preview });
 }

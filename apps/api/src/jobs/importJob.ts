@@ -1,3 +1,4 @@
+import { hiddenColumns } from "../auth/fields.js";
 import { parse } from "csv-parse";
 import { stringify } from "csv-stringify/sync";
 import { ALL_RECORDS, allowedDepartments, can, recordScope, isAdmin } from "../auth/access.js";
@@ -156,6 +157,8 @@ export async function runImport(job: Job) {
           ? null
           : undefined;
 
+  // fields hidden from this person: a column for one stops the import
+  const hidden = hiddenColumns(user, schema);
   const errors: { row: number; message: string }[] = [];
   // the rows with problems, as they were in the file, for the "fix and import again" file
   const problemRows: { raw: Record<string, string>; message: string }[] = [];
@@ -176,6 +179,10 @@ export async function runImport(job: Job) {
       const lower = name.toLowerCase();
       // the table's own columns come first (a column may be called "Department")
       const column = columnByNameOrLabel(schema, name);
+      if (column && hidden.has(column.name)) {
+        headerProblem ??= `You can't import into "${column.label || column.name}". Remove that column from the file.`;
+        return false;
+      }
       if (column) return column.name;
       if (lower === DEPARTMENT_HEADER.toLowerCase() || lower === LEGACY_DEPARTMENT_HEADER.toLowerCase()) return DEPARTMENT_KEY;
       if (lower === ID_HEADER.toLowerCase()) return ID_KEY;
@@ -187,7 +194,7 @@ export async function runImport(job: Job) {
     fileColumns = mapped.filter((m): m is string => typeof m === "string");
     // without an ID column every row is new: a required column must be there
     if (!fileColumns.includes(ID_KEY)) {
-      const missing = schema.columns.filter((c) => c.required && importable(c) && !fileColumns.includes(c.name) && c.default === undefined);
+      const missing = schema.columns.filter((c) => c.required && !hidden.has(c.name) && importable(c) && !fileColumns.includes(c.name) && c.default === undefined);
       if (missing.length) {
         headerProblem = `The file has no ${missing.map((c) => `"${c.label || c.name}"`).join(", ")} column${missing.length > 1 ? "s" : ""}, which every new record needs. Download the template from the Import window to see the columns.`;
       }
@@ -254,7 +261,7 @@ export async function runImport(job: Job) {
         const { values, errors: fieldErrors } = coerceValues(schema, row.payload);
         messages.push(...withCells(row, fieldErrors));
         const merged = { ...record.data, ...values };
-        messages.push(...Object.values(checkRequired(schema, merged)), ...Object.values(checkChoices(schema, values, record.data, user)));
+        messages.push(...Object.values(checkRequired(schema, merged, hidden)), ...Object.values(checkChoices(schema, values, record.data, user)));
         const rule = await ownRules(schema, values, record.data, user);
         if (rule) messages.push(rule);
         const departments = departmentsOf(row);
@@ -278,7 +285,7 @@ export async function runImport(job: Job) {
       messages.push(...withCells(row, fieldErrors));
       const rule = await ownRules(schema, values, null, user);
       if (rule) messages.push(rule);
-      messages.push(...Object.values(checkRequired(schema, values)), ...Object.values(checkChoices(schema, values, {}, user)));
+      messages.push(...Object.values(checkRequired(schema, values, hidden)), ...Object.values(checkChoices(schema, values, {}, user)));
 
       let departmentId: string | null | undefined = defaultDepartment;
       let sharedDepartmentIds: string[] = [];

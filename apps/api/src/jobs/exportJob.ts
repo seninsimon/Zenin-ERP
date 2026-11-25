@@ -1,3 +1,4 @@
+import { assertCanUse, hiddenColumns, visibleColumns } from "../auth/fields.js";
 import { stringify } from "csv-stringify";
 import { once } from "node:events";
 import { can, recordScope } from "../auth/access.js";
@@ -47,6 +48,9 @@ export async function runExport(job: Job) {
   const schema = await getSchema(job.tableName);
   if (!schema) throw new Error(`Table "${job.tableName}" no longer exists`);
   if (!can(user, schema, "view")) throw new Error("You no longer have access to this table");
+  // fields hidden from this person aren't exported (checked now, not when queued)
+  const columns = visibleColumns(user, schema);
+  const hide = [...hiddenColumns(user, schema)];
 
   // "Visible to" only when the table is shared with several departments (as in the list)
   const withDepartment = schema.byDepartment && schema.departments.length > 1;
@@ -57,13 +61,13 @@ export async function runExport(job: Job) {
       .filter(Boolean)
       .join("; ");
   const header = [
-    ...schema.columns.map((c) => c.label || c.name),
+    ...columns.map((c) => c.label || c.name),
     ...(withDepartment ? [DEPARTMENT_HEADER] : []),
     CREATED_BY_HEADER,
     // keep it to change these records by importing the file again
     ID_HEADER,
   ];
-  const departments = schema.columns.some((c) => c.type === "department") ? await departmentNames() : new Map<string, string>();
+  const departments = columns.some((c) => c.type === "department") ? await departmentNames() : new Map<string, string>();
   // BOM so Excel opens UTF-8 correctly
   const csv = stringify({ bom: true });
   const key = `exports/${job._id}.csv`;
@@ -83,13 +87,14 @@ export async function runExport(job: Job) {
     await write(header);
     // filters are re-validated: columns may have changed since the job was queued
     const filters = parseFilters(job.params.filters ?? [], schema, user);
+    assertCanUse(user, schema, filters.map((f) => f.field));
     const search = typeof job.params.search === "string" ? job.params.search : "";
-    for await (const batch of scanRecords(schema, { scope: recordScope(user, schema), search, filters })) {
+    for await (const batch of scanRecords(schema, { scope: recordScope(user, schema), search, filters, hide })) {
       const labels = await relationLabels(user, schema, batch);
       const people = await peopleLabels(schema, batch);
       for (const record of batch) {
         await write([
-          ...schema.columns.map((c) =>
+          ...columns.map((c) =>
             formatCell(
               c,
               record.data[c.name],

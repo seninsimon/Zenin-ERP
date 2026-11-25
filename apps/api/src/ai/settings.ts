@@ -20,9 +20,10 @@ export const DEFAULT_MODELS: Record<Provider, string> = {
 
 // The AI features an admin switches on and off. A switch appears once its
 // feature exists.
-export const FEATURES = ["draftApps", "askZenin"] as const;
+export const FEATURES = ["draftApps", "askZenin", "accessAi"] as const;
 export type Feature = (typeof FEATURES)[number];
-const FEATURE_DEFAULTS: Record<Feature, boolean> = { draftApps: true, askZenin: false };
+// for admins only (Draft apps, Change access with AI): on once there's a key
+const FEATURE_DEFAULTS: Record<Feature, boolean> = { draftApps: true, askZenin: false, accessAi: true };
 
 export type AiLimits = {
   monthlyUsd: number | null; // pause AI features at this estimated spend a month

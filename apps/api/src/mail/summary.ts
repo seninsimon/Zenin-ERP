@@ -1,3 +1,4 @@
+import { limitedColumns } from "../auth/fields.js";
 import type pg from "pg";
 import { listInstalled } from "../apps/installer.js";
 import { APP_BY_KEY, fullKey } from "../apps/index.js";
@@ -73,7 +74,8 @@ async function reminderItems(app: AppBlueprint, r: ReminderBlueprint, schema: Ta
     client
   );
   const display = pickDisplayField(schema);
-  const dateColumn = r.date && schema.columns.some((c) => c.name === r.date) ? r.date : null;
+  // never a field only some levels see (the summary goes to several people)
+  const dateColumn = r.date && schema.columns.some((c) => c.name === r.date) && !limitedColumns(schema).has(r.date) ? r.date : null;
   const managers = r.who === "$managers" ? await appManagers(app, schema.tableName, client) : [];
   const items: { userId: string; text: string; href: string | null }[] = [];
   for (const row of rows) {

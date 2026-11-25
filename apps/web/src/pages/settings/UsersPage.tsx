@@ -41,6 +41,7 @@ import {
 } from "../../api/reactQueryHooks/useAdmin";
 import { AppIcon } from "../../features/apps/AppIcon";
 import { PersonAccessDrawer, PersonAccessSummary } from "../../features/access/PersonAccessDrawer";
+import { AccessAiBox } from "../../features/access/AccessAiBox";
 import { useTables } from "../../api/reactQueryHooks/useTables";
 import { useCurrentUser } from "../../auth/AuthContext";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
@@ -742,7 +743,7 @@ export default function UsersPage() {
     <Page title="Users" breadcrumbs={[{ label: "Administration" }, { label: "Users" }]} width="wide">
       <PageHeader
         title="Users"
-        description="Accounts, their role and the departments they work in."
+        description="Accounts, what they can do in each app, and the departments they work in."
         help="users"
         meta={users.length ? <Badge variant="default">{pluralize(users.length, "user")}</Badge> : undefined}
         actions={
@@ -751,6 +752,8 @@ export default function UsersPage() {
           </Button>
         }
       />
+
+      <AccessAiBox />
 
       <DataTable
         label="Users"

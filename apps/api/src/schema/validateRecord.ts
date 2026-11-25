@@ -168,10 +168,12 @@ export function checkChoices(
 }
 
 // Required fields must be filled in the final (merged) record.
-export function checkRequired(schema: TableSchema, record: RecordData): Errors {
+// `skip`: fields hidden from the person saving (auth/fields.ts): they can't
+// fill them in, so they don't block the save
+export function checkRequired(schema: TableSchema, record: RecordData, skip?: Set<string>): Errors {
   const errors: Errors = {};
   for (const column of schema.columns) {
-    if (column.required && isEmpty(record[column.name], column)) {
+    if (column.required && !skip?.has(column.name) && isEmpty(record[column.name], column)) {
       errors[column.name] = `${column.label || column.name} is required`;
     }
   }

@@ -59,14 +59,20 @@ const toStored = (row: Row): StoredRecord => ({
 // WHERE conditions shared by lists and exports: department scope, search, filters.
 export function recordConditions(
   schema: TableSchema,
-  opts: { scope: RecordScope; search?: string; filters?: RecordFilter[] },
+  opts: { scope: RecordScope; search?: string; filters?: RecordFilter[]; hide?: string[] },
   params: unknown[]
 ): string {
   const conditions = [scopeCondition(params, opts.scope)];
-  // "contains" search over all values (GIN trigram index on erp_search_text)
+  // "contains" search over all values (GIN trigram index on erp_search_text).
+  // Fields hidden from this person are taken out first, so a search can't
+  // find a record by them (that search doesn't use the index).
   if (opts.search) {
     params.push(`%${escapeLike(opts.search)}%`);
-    conditions.push(`erp_search_text(t.data) ILIKE $${params.length}`);
+    const like = params.length;
+    if (opts.hide?.length) {
+      params.push(opts.hide);
+      conditions.push(`erp_search_text(t.data - $${params.length}::text[]) ILIKE $${like}`);
+    } else conditions.push(`erp_search_text(t.data) ILIKE $${like}`);
   }
   conditions.push(...filterConditions(schema, opts.filters ?? [], params));
   return conditions.join(" AND ");
@@ -91,6 +97,8 @@ export interface ListOptions {
   page: number;
   limit: number;
   scope: RecordScope;
+  // fields hidden from the person (auth/fields.ts): search leaves them out
+  hide?: string[];
 }
 
 export interface ListResult {
@@ -362,7 +370,7 @@ export const assignUnassigned = (tableName: string, departmentId: string) =>
 // Read a table in batches in insertion order (exports), within `scope`.
 export async function* scanRecords(
   schema: TableSchema,
-  opts: { scope: RecordScope; search?: string; filters?: RecordFilter[] },
+  opts: { scope: RecordScope; search?: string; filters?: RecordFilter[]; hide?: string[] },
   batchSize = 1000
 ) {
   const tableName = schema.tableName;

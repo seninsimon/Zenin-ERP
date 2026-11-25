@@ -55,6 +55,7 @@ import { deleteUploads } from "../storage.js";
 import type { Action, Column, CurrentUser, RecordData, TableSchema } from "../types.js";
 import { htmlToText } from "../lib/text.js";
 import { emitChange } from "../live/events.js";
+import { assertCanUse, assertCanWrite, hiddenColumns, visibleColumns, withoutHidden } from "../auth/fields.js";
 
 const VERBS: Record<Action, string> = { view: "view", create: "add", edit: "edit", delete: "delete" };
 
@@ -147,8 +148,9 @@ export async function listHandler(req: Request, res: Response) {
   // ?raw=1: stored values (ids, not names), e.g. for editing line items
   if (req.query.raw === "1") {
     const result = await listRecords(schema, listOptions(user, schema, query));
+    const hidden = hiddenColumns(user, schema);
     res.json({
-      data: result.rows.map((row) => ({ ...row.data, _id: row._id, _createdAt: row.createdAt })),
+      data: result.rows.map((row) => ({ ...withoutHidden(row.data, hidden), _id: row._id, _createdAt: row.createdAt })),
       total: result.total,
       totalIsEstimate: result.totalIsEstimate,
       page,
@@ -162,25 +164,34 @@ export async function listHandler(req: Request, res: Response) {
 
 export type ListQuery = { search?: unknown; filters?: unknown; sort?: unknown; order?: unknown; page: number; limit: number };
 
-const listOptions = (user: CurrentUser, schema: TableSchema, q: ListQuery): ListOptions => ({
-  search: typeof q.search === "string" ? q.search.slice(0, 200) : "",
-  filters: parseFilters(q.filters, schema, user),
-  sort: resolveSort(schema, q.sort),
-  order: q.order === "asc" ? "asc" : "desc",
-  page: q.page,
-  limit: q.limit,
-  scope: recordScope(user, schema),
-});
+const listOptions = (user: CurrentUser, schema: TableSchema, q: ListQuery): ListOptions => {
+  const filters = parseFilters(q.filters, schema, user);
+  const sort = resolveSort(schema, q.sort);
+  // a hidden field can't be filtered or sorted by (that would reveal it)
+  assertCanUse(user, schema, [...filters.map((f) => f.field), sort && typeof sort === "object" ? sort.name : null]);
+  return {
+    search: typeof q.search === "string" ? q.search.slice(0, 200) : "",
+    filters,
+    sort,
+    order: q.order === "asc" ? "asc" : "desc",
+    page: q.page,
+    limit: q.limit,
+    scope: recordScope(user, schema),
+    hide: [...hiddenColumns(user, schema)],
+  };
+};
 
 // A page of records as this person sees them: only records they may see,
 // links and people shown by name, rich text as plain text. Used by the lists
 // and by Ask Zenin (the assistant searches exactly like the person would).
 export async function listForUser(user: CurrentUser, schema: TableSchema, q: ListQuery) {
   const result = await listRecords(schema, listOptions(user, schema, q));
+  // fields hidden from this person aren't sent at all
+  const columns = visibleColumns(user, schema);
 
   // resolve relation ids to display names, only for records the user may see
   const relationLabels = new Map<string, Map<string, string>>();
-  for (const column of schema.columns) {
+  for (const column of columns) {
     if (column.type !== "relation" || !column.ref) continue;
     const ids = new Set(result.rows.flatMap((r) => fileUrls(r.data[column.name])));
     if (!ids.size) continue;
@@ -200,13 +211,13 @@ export async function listForUser(user: CurrentUser, schema: TableSchema, q: Lis
   }
 
   // names for "User" columns and "Created by"
-  const userColumns = schema.columns.filter((c) => c.type === "user");
+  const userColumns = columns.filter((c) => c.type === "user");
   const people = await getUserOptionsByIds([
     ...result.rows.map((r) => r.createdBy ?? ""),
     ...result.rows.flatMap((r) => userColumns.flatMap((c) => fileUrls(r.data[c.name]))),
   ]);
 
-  const departments = schema.columns.some((c) => c.type === "department") ? await departmentNames() : new Map();
+  const departments = columns.some((c) => c.type === "department") ? await departmentNames() : new Map();
 
   // "Visible to" only matters when the table is shared with several
   // departments (with one, every record is in it), and only to people who can
@@ -232,7 +243,7 @@ export async function listForUser(user: CurrentUser, schema: TableSchema, q: Lis
       _createdBy: userLabel(people, row.createdBy) || null,
       _createdById: row.createdBy ?? null,
     };
-    for (const column of schema.columns) {
+    for (const column of columns) {
       const value = row.data[column.name];
       if (column.type === "richtext") out[column.name] = htmlToText(value, 160);
       else if (column.type === "department") {
@@ -313,7 +324,7 @@ export async function getHandler(req: Request, res: Response) {
   const creator = record.createdBy ? await getUserOptionsByIds([record.createdBy]) : new Map();
   res.json({
     _id: record._id,
-    ...record.data,
+    ...withoutHidden(record.data, hiddenColumns(user, schema)),
     _departmentId: record.departmentId,
     _departmentIds: visibleTo(record),
     _departmentName: visibleToNames(schema, record),
@@ -389,6 +400,7 @@ export async function bulkUpdateHandler(req: Request, res: Response) {
   const field = typeof req.body?.field === "string" ? req.body.field : "";
   const column = schema.columns.find((c) => c.name === field);
   if (!column || !bulkUpdatable(column)) throw new HttpError(400, "Choose a field that can be changed for many records");
+  assertCanWrite(user, schema, { [column.name]: true });
 
   const raw = req.body?.value;
   const clearing = raw === null || raw === undefined || raw === "" || (Array.isArray(raw) && !raw.length);
@@ -408,7 +420,7 @@ export async function bulkUpdateHandler(req: Request, res: Response) {
         await keepItYours(schema, own, current.data, user);
         await checkNotApprovingOwn(schema, own, current.data, user);
         const merged: RecordData = { ...current.data, ...own };
-        throwIfErrors({ ...checkRequired(schema, merged), ...checkChoices(schema, own, current.data, user) });
+        throwIfErrors({ ...checkRequired(schema, merged, hiddenColumns(user, schema)), ...checkChoices(schema, own, current.data, user) });
         throwIfErrors(await checkRelations(user, schema, own, current.data));
         const changes = diffRecord(current.data, merged);
         if (!Object.keys(changes).length) return; // already that value
@@ -434,6 +446,8 @@ export async function bulkUpdateHandler(req: Request, res: Response) {
 export async function createHandler(req: Request, res: Response) {
   const user = currentUser(req);
   const schema = await loadTable(req, "create");
+  assertCanWrite(user, schema, req.body);
+  const hidden = hiddenColumns(user, schema);
   const payload = withDefaults(schema, (req.body ?? {}) as Record<string, unknown>, user);
   const preview = isPreview(req);
 
@@ -444,7 +458,7 @@ export async function createHandler(req: Request, res: Response) {
   await keepItYours(schema, values, null, user).catch((e) => {
     if (!preview) throw e;
   });
-  throwIfErrors({ ...errors, ...(preview ? {} : checkRequired(schema, values)), ...checkChoices(schema, values, {}, user) });
+  throwIfErrors({ ...errors, ...(preview ? {} : checkRequired(schema, values, hidden)), ...checkChoices(schema, values, {}, user) });
   if (!preview) await checkNotApprovingOwn(schema, values, {}, user);
   const departments = preview
     ? (() => {
@@ -463,7 +477,7 @@ export async function createHandler(req: Request, res: Response) {
     await applyFormulas(schema, [newId], client);
     // its line items (an invoice's lines), then totals over them
     await saveChildren(req, user, schema, newId, departments, payload._children, client, { preview });
-    if (preview) throw new PreviewDone(await readBack(schema, newId, client));
+    if (preview) throw new PreviewDone(await readBack(schema, newId, client, user));
     await refreshParents(schema.tableName, [values], client); // totals in the records it links to
     // "assigned you" notifications, and the table's automations
     await afterSave(schema, newId, null, values, user._id, user, client);
@@ -499,6 +513,8 @@ export async function updateHandler(req: Request, res: Response) {
   const expectedUpdatedAt = payload._expectedUpdatedAt;
   delete payload._expectedUpdatedAt;
 
+  assertCanWrite(user, schema, payload);
+  const hidden = hiddenColumns(user, schema);
   const { values, errors } = coerceValues(schema, payload);
   throwIfErrors(errors);
   const preview = isPreview(req);
@@ -517,13 +533,13 @@ export async function updateHandler(req: Request, res: Response) {
     await keepItYours(schema, values, current.data, user);
     if (!preview) await checkNotApprovingOwn(schema, values, current.data, user);
     const merged: RecordData = { ...current.data, ...values };
-    throwIfErrors({ ...(preview ? {} : checkRequired(schema, merged)), ...checkChoices(schema, values, current.data, user) });
+    throwIfErrors({ ...(preview ? {} : checkRequired(schema, merged, hidden)), ...checkChoices(schema, values, current.data, user) });
     throwIfErrors(await checkRelations(user, schema, values, current.data));
 
     await updateRecord(schema.tableName, id, values, { scope: ALL_RECORDS, newDepartments }, client);
     await applyFormulas(schema, [id], client);
     await saveChildren(req, user, schema, id, newDepartments ?? current, payload._children, client, { preview });
-    if (preview) throw new PreviewDone(await readBack(schema, id, client));
+    if (preview) throw new PreviewDone(await readBack(schema, id, client, user));
     // totals in the records it links to: before (it may have moved) and after
     await refreshParents(schema.tableName, [current.data, merged], client);
     // "assigned you" notifications, and the table's automations

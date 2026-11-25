@@ -51,6 +51,22 @@ export const HELP = {
       "Each app brings its own Staff and Manager roles. You give them to people with App access on the Users page, so most companies never need to make a role here.",
     ],
   },
+  accessAi: {
+    title: "Change access with AI",
+    text: [
+      "Say what you want in plain words: \"Let Senin edit leave requests\", or ask \"Who can see Payroll?\".",
+      "The AI suggests the smallest change and shows exactly what it does for each person. Nothing changes until you press Apply. It can't make anyone an Administrator.",
+    ],
+    example: "\"Give Asha the same as Ravi in Sales, but she can't delete orders.\"",
+  },
+  fieldLevels: {
+    title: "Who sees this field",
+    text: [
+      "Limit a field to some levels of this app, such as Managers. Others don't see it anywhere: not in lists, records, search, exports, history or emails.",
+      "Formulas and totals worked out from it are hidden from them too. The field that names each record can't be limited.",
+    ],
+    example: "Salary, for Managers only. Staff still see the rest of the employee record.",
+  },
   sameAccess: {
     title: "Same access as…",
     text: ["Copies another person's departments and app levels into this form. Nothing is saved until you press Save.", "It never copies Administrator."],

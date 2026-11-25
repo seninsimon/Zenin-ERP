@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { visibleColumns } from "../auth/fields.js";
 import { z } from "zod";
 import { can, isAdmin } from "../auth/access.js";
 import { listForUser } from "../controllers/records.js";
@@ -8,7 +8,8 @@ import { searchUserOptions } from "../repo/userRepo.js";
 import { pickDisplayField, valueType } from "../schema/columns.js";
 import { getAllSchemas, getSchema } from "../schema/schemaRepo.js";
 import type { Column, CurrentUser, TableSchema } from "../types.js";
-import { failed, metered, post, refused, TIMEOUT_MS, type Ai, type Meter } from "./generate.js";
+import { metered } from "./generate.js";
+import { chatWithTools, type ToolDef, type Turn } from "./toolChat.js";
 import { activeAi, getAiSettings } from "./settings.js";
 import { checkLimits } from "./usage.js";
 import { brandName } from "../branding.js";
@@ -19,9 +20,8 @@ import { brandName } from "../branding.js";
 // the record lists, so it can only see what they can see. Conversations
 // aren't kept on the server: the browser sends the last turns each time.
 
-export type Turn = { role: "user" | "assistant"; content: string };
+export type { Turn };
 
-const MAX_ROUNDS = 6; // tool rounds per question
 const MAX_TURNS = 12; // earlier turns sent back for context
 const RESULT_LIMIT = 25;
 
@@ -55,8 +55,6 @@ const SearchInput = z.object({
   limit: z.number().int().min(1).max(RESULT_LIMIT).optional(),
 });
 const PeopleInput = z.object({ name: z.string().max(100) });
-
-type ToolDef = { name: string; description: string; parameters: Record<string, unknown> };
 
 const TOOLS: ToolDef[] = [
   {
@@ -194,7 +192,8 @@ function describeColumn(c: Column) {
 async function instructions(user: CurrentUser) {
   const tables = (await getAllSchemas()).filter((s: TableSchema) => can(user, s, "view")).sort((a, b) => a.tableName.localeCompare(b.tableName));
   const today = new Date().toISOString().slice(0, 10);
-  const lines = tables.map((t) => `- ${t.tableName} (${title(t.tableName)}): ${t.columns.map(describeColumn).join("; ")}`);
+  // fields hidden from this person aren't described (or searchable: see listForUser)
+  const lines = tables.map((t) => `- ${t.tableName} (${title(t.tableName)}): ${visibleColumns(user, t).map(describeColumn).join("; ")}`);
   return `You are Ask Zenin, the assistant inside ${await brandName()}, an ERP. You answer questions about the organization's records for ${user.fullName || user.username}${
     user.departments.length ? ` (${user.departments.map((d) => d.name).join(", ")})` : ""
   }. Today is ${today}.
@@ -217,152 +216,6 @@ Filter operators by column type: ${Object.entries(OPS)
 
 The tables ${user.fullName || "this person"} can see (key (Title): column key "Label" (type)):
 ${lines.length ? lines.join("\n") : "(none)"}`;
-}
-
-/* ---------------- the three providers ---------------- */
-
-type Run = { user: CurrentUser; system: string; turns: Turn[]; ai: Ai; meter: Meter };
-
-const outOfRounds = "I couldn't finish looking that up. Try a more specific question.";
-
-async function chatClaude({ user, system, turns, ai, meter }: Run): Promise<string> {
-  const client = new Anthropic({ apiKey: ai.key, authToken: null, timeout: TIMEOUT_MS });
-  const tools: Anthropic.Beta.Messages.BetaTool[] = TOOLS.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.parameters as Anthropic.Beta.Messages.BetaTool.InputSchema,
-  }));
-  const messages: Anthropic.Beta.Messages.BetaMessageParam[] = turns.map((t) => ({ role: t.role, content: t.content }));
-  try {
-    for (let round = 0; round < MAX_ROUNDS; round++) {
-      const response = await client.beta.messages.create({
-        model: ai.model,
-        max_tokens: 16000,
-        // a declined request is re-run on Anthropic's recommended fallback model
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        // a chat: quick answers; the instructions and tables are cached across rounds
-        output_config: { effort: "low" },
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-        tools,
-        messages,
-      });
-      const u = response.usage;
-      meter.cacheRead += u.cache_read_input_tokens ?? 0;
-      meter.cacheWrite += u.cache_creation_input_tokens ?? 0;
-      meter.input += u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-      meter.output += u.output_tokens;
-
-      if (response.stop_reason === "refusal") throw refused(ai);
-      const uses = response.content.filter((b): b is Anthropic.Beta.Messages.BetaToolUseBlock => b.type === "tool_use");
-      if (response.stop_reason !== "tool_use" || !uses.length) {
-        if (response.stop_reason === "max_tokens") throw new HttpError(502, "The answer came back incomplete. Try a narrower question.");
-        const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("").trim();
-        return text || outOfRounds;
-      }
-      // the whole answer goes back as it came (thinking included)
-      messages.push({ role: "assistant", content: response.content });
-      const results: Anthropic.Beta.Messages.BetaToolResultBlockParam[] = [];
-      for (const use of uses) {
-        const r = await runTool(user, use.name, use.input);
-        results.push({ type: "tool_result", tool_use_id: use.id, content: r.text, is_error: r.isError });
-      }
-      messages.push({ role: "user", content: results });
-    }
-    return outOfRounds;
-  } catch (error) {
-    if (error instanceof HttpError) throw error;
-    if (error instanceof Anthropic.APIConnectionError) throw new HttpError(502, "Couldn't reach Claude. Check the server's internet connection and try again.");
-    if (error instanceof Anthropic.APIError) throw failed(ai, error.status ?? 502, error.message);
-    throw error;
-  }
-}
-
-type GeminiPart = { text?: string; thought?: boolean; functionCall?: { id?: string; name: string; args?: unknown }; [k: string]: unknown };
-type GeminiContent = { role: "user" | "model"; parts: GeminiPart[] };
-
-async function chatGemini({ user, system, turns, ai, meter }: Run): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(ai.model)}:generateContent`;
-  const contents: GeminiContent[] = turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] }));
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const data = (await post(
-      ai,
-      url,
-      { "x-goog-api-key": ai.key },
-      {
-        systemInstruction: { parts: [{ text: system }] },
-        contents,
-        tools: [{ functionDeclarations: TOOLS }],
-      }
-    )) as {
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
-      promptFeedback?: { blockReason?: string };
-      candidates?: { finishReason?: string; content?: GeminiContent }[];
-    };
-    meter.input += data.usageMetadata?.promptTokenCount ?? 0;
-    meter.output += (data.usageMetadata?.candidatesTokenCount ?? 0) + (data.usageMetadata?.thoughtsTokenCount ?? 0);
-    const candidate = data.candidates?.[0];
-    if (data.promptFeedback?.blockReason || !candidate?.content) throw refused(ai);
-    const parts = candidate.content.parts ?? [];
-    const calls = parts.filter((p) => p.functionCall);
-    if (!calls.length) {
-      if (candidate.finishReason === "MAX_TOKENS") throw new HttpError(502, "The answer came back incomplete. Try a narrower question.");
-      if (candidate.finishReason && !["STOP", "FINISH_REASON_UNSPECIFIED"].includes(candidate.finishReason)) throw refused(ai);
-      return parts.filter((p) => !p.thought && p.text).map((p) => p.text).join("").trim() || outOfRounds;
-    }
-    // the model's turn goes back exactly as it came (its thought signatures with it)
-    contents.push({ role: "model", parts });
-    const responses: GeminiPart[] = [];
-    for (const call of calls) {
-      const fc = call.functionCall!;
-      const r = await runTool(user, fc.name, fc.args ?? {});
-      responses.push({
-        functionResponse: { name: fc.name, ...(fc.id ? { id: fc.id } : {}), response: r.isError ? { error: r.text } : { result: JSON.parse(r.text) } },
-      });
-    }
-    contents.push({ role: "user", parts: responses });
-  }
-  return outOfRounds;
-}
-
-type OpenAiMessage =
-  | { role: "system" | "user"; content: string }
-  | { role: "assistant"; content: string | null; tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[] }
-  | { role: "tool"; tool_call_id: string; content: string };
-
-async function chatChatGpt({ user, system, turns, ai, meter }: Run): Promise<string> {
-  const messages: OpenAiMessage[] = [{ role: "system", content: system }, ...turns.map((t) => ({ role: t.role, content: t.content }) as OpenAiMessage)];
-  const tools = TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const data = (await post(ai, "https://api.openai.com/v1/chat/completions", { Authorization: `Bearer ${ai.key}` }, { model: ai.model, messages, tools })) as {
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-      choices?: {
-        finish_reason?: string;
-        message?: { content?: string | null; refusal?: string | null; tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[] };
-      }[];
-    };
-    meter.input += data.usage?.prompt_tokens ?? 0;
-    meter.output += data.usage?.completion_tokens ?? 0;
-    const choice = data.choices?.[0];
-    if (!choice?.message || choice.message.refusal) throw refused(ai);
-    const calls = choice.message.tool_calls ?? [];
-    if (!calls.length) {
-      if (choice.finish_reason === "length") throw new HttpError(502, "The answer came back incomplete. Try a narrower question.");
-      return (choice.message.content ?? "").trim() || outOfRounds;
-    }
-    messages.push({ role: "assistant", content: choice.message.content ?? null, tool_calls: calls });
-    for (const call of calls) {
-      let args: unknown = {};
-      try {
-        args = JSON.parse(call.function.arguments || "{}");
-      } catch {
-        // runTool reports the missing fields
-      }
-      const r = await runTool(user, call.function.name, args);
-      messages.push({ role: "tool", tool_call_id: call.id, content: r.isError ? `Error: ${r.text}` : r.text });
-    }
-  }
-  return outOfRounds;
 }
 
 /* ---------------- the question ---------------- */
@@ -394,9 +247,8 @@ export async function ask(user: CurrentUser, rawTurns: unknown): Promise<{ answe
   const who = { _id: user._id, isAdmin: isAdmin(user) };
   await checkLimits(who);
   const system = await instructions(user);
-  const answer = await metered(ai, "askZenin", who, (meter) => {
-    const run = { user, system, turns, ai, meter };
-    return ai.provider === "anthropic" ? chatClaude(run) : ai.provider === "gemini" ? chatGemini(run) : chatChatGpt(run);
-  });
+  const answer = await metered(ai, "askZenin", who, (meter) =>
+    chatWithTools({ system, turns, ai, meter, tools: TOOLS, runTool: (name, input) => runTool(user, name, input) })
+  );
   return { answer };
 }

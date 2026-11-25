@@ -1,3 +1,4 @@
+import { limitedColumns } from "../auth/fields.js";
 import { dataTable } from "../db/dataTables.js";
 import { query, type Db } from "../db/pool.js";
 import { departmentNames, getUserOptionsByIds, userLabel } from "../repo/userRepo.js";
@@ -80,7 +81,9 @@ const dateText = (value: string) => {
 
 // The record's first few fields as "label: value", for an email.
 export async function recordDetails(schema: TableSchema, data: RecordData, db?: Db, max = 7) {
-  const columns = schema.columns.filter((c) => c.showInTable !== false && !SKIPPED.includes(c.type)).slice(0, max);
+  // never a field only some levels see: an email isn't checked per person
+  const limited = limitedColumns(schema);
+  const columns = schema.columns.filter((c) => c.showInTable !== false && !SKIPPED.includes(c.type) && !limited.has(c.name)).slice(0, max);
   const ids = (v: unknown) => ([] as unknown[]).concat(v ?? []).filter((x): x is string => typeof x === "string" && x.length > 0);
   const people = await getUserOptionsByIds(columns.filter((c) => c.type === "user").flatMap((c) => ids(data[c.name])));
   const departments = columns.some((c) => c.type === "department") ? await departmentNames() : new Map<string, string>();

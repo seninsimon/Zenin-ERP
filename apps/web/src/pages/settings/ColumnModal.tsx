@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   Button,
+  Checkbox,
   Group,
   Modal,
+  Radio,
   Select,
   SimpleGrid,
   Stack,
@@ -17,6 +19,7 @@ import { useMediaQuery } from "@mantine/hooks";
 
 import { errorMessage } from "../../api/api";
 import { useAddColumn, useTables, useUpdateColumn } from "../../api/reactQueryHooks/useTables";
+import { useAccessLevels } from "../../api/reactQueryHooks/useAdmin";
 import { tableTitle } from "../../layout/nav";
 import type { ChoiceOption, RollupConfig } from "../../features/records/schema";
 import { ChoiceOptionsEditor } from "./ChoiceOptionsEditor";
@@ -43,6 +46,8 @@ export type SchemaColumn = {
   formula?: { expression: string; type?: string };
   rollup?: RollupConfig;
   inline?: boolean;
+  // only these levels of the table's app (and admins) see it
+  onlyLevels?: string[];
 };
 
 const COLUMN_NAME = /^[a-zA-Z0-9_][a-zA-Z0-9_ -]{0,62}$/;
@@ -63,6 +68,9 @@ type Values = {
   expression: string;
   rollup: Partial<RollupConfig>;
   inline: boolean;
+  // "Who sees this field": [] = everyone who can use the table
+  onlyLevels: string[];
+  limited: boolean;
 };
 
 const NEW_COLUMN: Values = {
@@ -80,6 +88,8 @@ const NEW_COLUMN: Values = {
   expression: "",
   rollup: {},
   inline: false,
+  onlyLevels: [],
+  limited: false,
 };
 
 // INV-0001 for the prefix "INV-"
@@ -166,6 +176,7 @@ export function ColumnModal({
       ref: (v, values) => (!editing && values.type === "relation" && !v ? "Choose the table to link to" : null),
       options: (v, values) => (values.type === "choice" && !convertingToChoice(values.type) ? optionsError(v) : null),
       expression: (v, values) => (values.type === "formula" && !v.trim() ? "Enter a formula" : null),
+      onlyLevels: (v, values) => (values.limited && !v.length ? "Choose at least one level" : null),
       rollup: (v, values) =>
         values.type !== "rollup"
           ? null
@@ -197,6 +208,8 @@ export function ColumnModal({
             expression: column.formula?.expression ?? "",
             rollup: column.rollup ?? {},
             inline: Boolean(column.inline),
+            onlyLevels: column.onlyLevels ?? [],
+            limited: Boolean(column.onlyLevels?.length),
           }
         : NEW_COLUMN
     );
@@ -245,6 +258,7 @@ export function ColumnModal({
           ...(v.type === "formula" ? { formula: { expression: v.expression } } : {}),
           ...(v.type === "rollup" ? { rollup: { fn: "count", ...v.rollup } } : {}),
           ...(v.type === "relation" && !v.multiple ? { inline: v.inline } : {}),
+          onlyLevels: v.limited ? v.onlyLevels : [],
         });
       } else {
         await add.mutateAsync({
@@ -262,6 +276,7 @@ export function ColumnModal({
           ...(v.type === "formula" ? { formula: { expression: v.expression } } : {}),
           ...(v.type === "rollup" ? { rollup: { fn: "count", ...v.rollup } } : {}),
           ...(v.type === "relation" && !v.multiple ? { inline: v.inline } : {}),
+          ...(v.limited ? { onlyLevels: v.onlyLevels } : {}),
         });
       }
       onClose();
@@ -273,7 +288,9 @@ export function ColumnModal({
           ? { expression: message }
           : v.type === "rollup" && /total/i.test(message)
             ? { rollup: message }
-            : { label: message }
+            : /names each record/.test(message)
+              ? { onlyLevels: message }
+              : { label: message }
       );
     }
   });
@@ -300,6 +317,10 @@ export function ColumnModal({
     if (column?.type === "choice") return "Can be changed to Text.";
     return "Changing the type doesn't convert existing values.";
   };
+
+  // the levels of this table's app, for "Who sees this field"
+  const { data: levelData } = useAccessLevels();
+  const appLevels = levelData?.apps.find((a) => a.tables.includes(table))?.levels ?? [];
 
   const tableOptions = (tables as { tableName: string }[]).map((t) => ({
     value: t.tableName,
@@ -470,6 +491,35 @@ export function ColumnModal({
                 description="Records can't be saved without a value"
                 {...form.getInputProps("required", { type: "checkbox" })}
               />
+            )}
+            <Radio.Group
+              label={<WithHelp topic="fieldLevels">Who sees this field</WithHelp>}
+              value={form.values.limited ? "some" : "everyone"}
+              onChange={(v) => {
+                const some = v === "some";
+                form.setFieldValue("limited", some);
+                // Managers by default: the usual reason to limit a field
+                if (some && !form.values.onlyLevels.length && appLevels.some((l) => l.level === "manager")) form.setFieldValue("onlyLevels", ["manager"]);
+              }}
+            >
+              <Stack gap={6} mt={6}>
+                <Radio value="everyone" label="Everyone who can use this table" />
+                <Radio value="some" label="Only some levels" description="Admins always see it. Formulas and totals that use it are hidden from the others too." />
+              </Stack>
+            </Radio.Group>
+            {form.values.limited && (
+              <Checkbox.Group
+                aria-label="Levels that see this field"
+                value={form.values.onlyLevels}
+                onChange={(v) => form.setFieldValue("onlyLevels", v)}
+                error={form.errors.onlyLevels}
+              >
+                <Group gap="md" mt={-4}>
+                  {appLevels.map((l) => (
+                    <Checkbox key={l.level} value={l.level} label={l.name} />
+                  ))}
+                </Group>
+              </Checkbox.Group>
             )}
             <Switch
               label="Show in the records list"

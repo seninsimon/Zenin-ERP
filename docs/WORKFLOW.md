@@ -114,6 +114,64 @@ from others are dropped; nobody gets more than one of their roles gave).
 - The API still accepts roles of no app (`POST /roles`, used by the tests).
   The screens never make them.
 
+**Fields only some levels see** (`src/auth/fields.ts`). A column's **Who sees
+this field** (column dialog): everyone who can use the table, or only some
+levels of the table's app (`column.onlyLevels`, level keys; Manager ticked
+by default). Admins always see it. The columns list shows a badge.
+- `hiddenColumns(user, schema)` decides it: limited fields the person has no
+  level for, plus formulas that use a hidden field and totals (rollups) over
+  a hidden field or `where` column of another table, repeated until nothing
+  changes. `limitedColumns(schema)` is the same for "anyone but admins".
+- **Reading:** `listForUser` (lists, Ask Zenin), `?raw=1`, the record, the
+  save preview (`readBack`, lines too), exports (header and cells) and record
+  history (non-admins: hidden keys taken out of `changes`) leave hidden
+  fields out. `GET /schema` and `/schema/:table` don't describe them, so the
+  screens never show them. Ask Zenin's instructions don't list them.
+- **Search** takes hidden fields out before matching
+  (`erp_search_text(t.data - hidden)`; that search doesn't use the trigram
+  index). **Filtering or sorting** by a hidden field is refused (400), in
+  lists, Ask Zenin and exports.
+- **Writing:** create, update, bulk update and line items refuse a hidden
+  field (403); a CSV with a column for one fails with "You can't import into
+  …". A hidden required field doesn't block people who can't fill it in
+  (`checkRequired(…, skip)`).
+- **Sent to many people at once,** a limited field never appears: emails'
+  record details, the morning summary's date, and an automation's "X is now
+  …" title (it becomes "X changed").
+- **The field that names records** (links, notifications, emails) can't be
+  limited (400 "… names each record"), and `pickDisplayField` never picks a
+  limited one, even when a request asks for it (`?displayField=`).
+- Not covered (good to know): an uploaded file's address (`/uploads/<key>`)
+  works for anyone logged in who has it. Hidden file fields never send their
+  addresses, and the keys are random.
+
+**Change access with AI** (AI · Beta, admins; `src/ai/accessAssistant.ts`).
+Users → **Tell Zenin what to change**, shown when there's an AI key and the
+"Change access with AI" switch is on (Administration → AI; on by default,
+like Draft apps).
+- `POST /ai/access { turns }` → `{ answer, proposal }`. The AI has read-only
+  tools (find_people, what_can_they_do, who_can_use, app_levels) and one
+  `propose_changes` tool. Its instructions say: pick the smallest change;
+  for one person, don't change a level others have (add a small level
+  instead); never Administrators.
+- **A suggestion is worked out in memory** (`simulate()`): the company's
+  roles, people and departments are copied, the changes applied, and each
+  touched person's access is worked out with `personAccess()`, the same
+  function as "What they can do", before and after. The preview lists each
+  step ("Affects everyone with this level: …"), each person's changed tables
+  ("Deals: view only, all records → everything, all records"), and Manager
+  warnings. Mistakes (an unknown app, an Administrator) go back to the AI as
+  errors so it can try again.
+- Changes it can suggest: `set_app_level`, `set_level_rights`, `add_level`
+  (with rights, given to people), `set_departments`. There is no change that
+  makes or touches an Administrator.
+- **Apply** (`POST /ai/access/apply { summary, changes }`) checks everything
+  again from scratch, then saves through the normal functions
+  (`rolesForAccess`/`updateUser`, `addLevel`, `saveLevel`). Each change is in
+  the audit log with `madeWithAi: true`. Use is counted as `accessAi`.
+- The conversation code shared with Ask Zenin is `src/ai/toolChat.ts`
+  (`chatWithTools`: Claude, Gemini and ChatGPT with tools).
+
 **Moving older roles** (roles of no app other than Admin and Member, from
 before levels). Access levels shows them in a yellow box. **Preview the
 move** (`POST /access-levels/move { apply: false }`) works the whole move out

@@ -1,3 +1,4 @@
+import { visibleColumns } from "../auth/fields.js";
 import type { Request, Response } from "express";
 import { launcherApp } from "../apps/index.js";
 import { allowedDepartments, can, isAdmin, tablePermissions } from "../auth/access.js";
@@ -30,6 +31,8 @@ import type { CurrentUser, TableSchema } from "../types.js";
 // app it belongs to in the launcher and sidebar ("Company", "Projects"; null = your own).
 const withAccess = (user: CurrentUser, schema: TableSchema) => ({
   ...schema,
+  // fields hidden from this person aren't even described to them
+  columns: visibleColumns(user, schema),
   app: launcherApp(schema.appKey),
   permissions: tablePermissions(user, schema),
   allowedDepartments: allowedDepartments(user, schema),

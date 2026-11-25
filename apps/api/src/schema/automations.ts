@@ -1,3 +1,4 @@
+import { limitedColumns } from "../auth/fields.js";
 import type pg from "pg";
 import { dataTable } from "../db/dataTables.js";
 import { query } from "../db/pool.js";
@@ -224,9 +225,14 @@ export async function afterSave(
         patch[column.name] = v;
       } else {
         const people = await recipients(schema, action.who, after, createdBy, client);
+        // a field only some levels see: its value isn't put in the title,
+        // which goes to people who may not be allowed to see it
+        const watched = schema.columns.find((c) => c.name === (a.trigger as { column: string }).column)!;
         const change =
           a.trigger.when === "changed"
-            ? `${label(schema.columns.find((c) => c.name === (a.trigger as { column: string }).column)!)} is now ${String(after[a.trigger.column] ?? "empty")}`
+            ? limitedColumns(schema).has(watched.name)
+              ? `${label(watched)} changed`
+              : `${label(watched)} is now ${String(after[a.trigger.column] ?? "empty")}`
             : `New in ${table}`;
         await notify(client, people, {
           title: action.message || `${title}: ${change}`,

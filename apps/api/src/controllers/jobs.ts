@@ -1,3 +1,4 @@
+import { assertCanUse } from "../auth/fields.js";
 import busboy from "busboy";
 import type { Request, Response } from "express";
 import { randomUUID } from "node:crypto";
@@ -18,6 +19,7 @@ export async function startExportHandler(req: Request, res: Response) {
   // optional: export only what the list currently shows
   const search = typeof req.body?.search === "string" ? req.body.search.slice(0, 200) : "";
   const filters = parseFilters(req.body?.filters, schema);
+  assertCanUse(user, schema, filters.map((f) => f.field));
   const job = await createJob({
     type: "export",
     tableName: schema.tableName,

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { can, recordScope, isAdmin } from "../auth/access.js";
+import { hiddenColumns, withoutHidden } from "../auth/fields.js";
 import { HttpError, intParam } from "../lib/http.js";
 import { currentUser } from "../middleware/auth.js";
 import { listAudit } from "../repo/auditRepo.js";
@@ -37,6 +38,14 @@ export async function listAuditHandler(req: Request, res: Response) {
     }
     // record history only: no browsing by user or other entities
     Object.assign(filter, { userId: undefined, entity: "record" });
+    // changes are kept per field ({ salary: { from, to } }): hidden fields are left out
+    const hidden = hiddenColumns(user, schema);
+    const result = await listAudit(filter);
+    res.json({
+      ...result,
+      data: result.data.map((e) => ({ ...e, changes: e.changes && typeof e.changes === "object" ? withoutHidden(e.changes as Record<string, unknown>, hidden) : e.changes })),
+    });
+    return;
   }
 
   res.json(await listAudit(filter));

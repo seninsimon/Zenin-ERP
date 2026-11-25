@@ -18,6 +18,7 @@ import {
   Text,
   TextInput,
   ThemeIcon,
+  Tooltip,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -28,13 +29,14 @@ import {
   IconEdit,
   IconInfoCircle,
   IconLink,
+  IconLock,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { assignUnassignedRecords, deleteTable, errorMessage } from "../../api/api";
-import { useDepartments, useTableUse } from "../../api/reactQueryHooks/useAdmin";
+import { useAccessLevels, useDepartments, useTableUse } from "../../api/reactQueryHooks/useAdmin";
 import { useDeleteColumn, useSchema, useUpdateTableSettings } from "../../api/reactQueryHooks/useTables";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 import { confirmDanger } from "../../components/ui/confirm";
@@ -296,6 +298,12 @@ function AccessSection({ schema }: { schema: Schema }) {
 function ColumnsSection({ schema }: { schema: Schema }) {
   const remove = useDeleteColumn(schema.tableName);
   const [modal, setModal] = useState<{ column: SchemaColumn | null } | null>(null);
+  // level keys -> names ("manager" -> "Manager"), for fields only some levels see
+  const { data: levelData } = useAccessLevels();
+  const levelNames = useMemo(
+    () => new Map((levelData?.apps.find((a) => a.tables.includes(schema.tableName))?.levels ?? []).map((l) => [l.level, l.name])),
+    [levelData, schema.tableName]
+  );
 
   const columns = useMemo<DataTableColumn<SchemaColumn>[]>(
     () => [
@@ -308,9 +316,18 @@ function ColumnsSection({ schema }: { schema: Schema }) {
         accessor: (c) => c.label || c.name,
         cell: (c) => (
           <div style={{ minWidth: 0 }}>
-            <Text size="sm" fw={500} truncate>
-              {c.label || c.name}
-            </Text>
+            <Group gap={6} wrap="nowrap">
+              <Text size="sm" fw={500} truncate>
+                {c.label || c.name}
+              </Text>
+              {c.onlyLevels?.length ? (
+                <Tooltip label="Only these levels (and admins) see this field">
+                  <Badge size="xs" variant="light" color="orange" leftSection={<IconLock size={10} />}>
+                    {c.onlyLevels.map((l) => levelNames.get(l) ?? l).join(", ")}
+                  </Badge>
+                </Tooltip>
+              ) : null}
+            </Group>
             <Text size="xs" c="dimmed" ff="monospace" truncate>
               {c.name}
             </Text>
@@ -381,7 +398,7 @@ function ColumnsSection({ schema }: { schema: Schema }) {
           ),
       },
     ],
-    []
+    [levelNames]
   );
 
   const askDelete = (c: SchemaColumn) =>

@@ -63,6 +63,9 @@ export interface Column {
   // "department" columns only: filled in from this User column's person when
   // that's picked and the department is empty (see schema/fromUser.ts)
   fromUser?: string;
+  // only people with one of these levels of the table's app (and admins)
+  // see or change this field: "manager", "accountant" (see auth/fields.ts)
+  onlyLevels?: string[];
   // "relation" columns only: these records are edited inside the linked
   // record's form (an invoice's lines); see controllers/lineItems.ts
   inline?: boolean;

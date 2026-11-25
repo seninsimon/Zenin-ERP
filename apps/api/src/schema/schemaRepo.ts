@@ -10,7 +10,7 @@ import { backfillAutonumber, deleteCounters } from "./autonumber.js";
 import { distinctTextValues, rewriteChoiceValues } from "./choiceValues.js";
 import { applyFormulas, checkFormulas, formulaRefs } from "./formula.js";
 import { assertNotUsedByRollups, checkRollups, refreshAllParents } from "./rollups.js";
-import { applyColumnUpdate, normalizeColumn, validateTableName } from "./columns.js";
+import { applyColumnUpdate, assertNameOpen, normalizeColumn, validateTableName } from "./columns.js";
 
 /* ============================ cache ============================ */
 // Schemas are read on almost every request, so they're cached per process.
@@ -202,6 +202,7 @@ export async function addColumn(tableName: string, input: Record<string, unknown
         throw new HttpError(409, `A column named "${column.name}" already exists`);
       }
       added = column;
+      assertNameOpen([...columns, column], column);
       return [...columns, column];
     },
     // existing records get numbers in the order they were created
@@ -238,7 +239,9 @@ export async function updateColumn(tableName: string, columnName: string, payloa
       if (index === -1) throw new HttpError(404, "Column not found");
       before = columns[index];
       after = applyColumnUpdate(columns[index], payload);
-      return columns.map((c, i) => (i === index ? after! : c));
+      const next = columns.map((c, i) => (i === index ? after! : c));
+      assertNameOpen(next, after);
+      return next;
     },
     async (client) => {
       if (before!.type === "choice" || after!.type === "choice") {

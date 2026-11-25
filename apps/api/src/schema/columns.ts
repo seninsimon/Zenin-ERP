@@ -209,6 +209,8 @@ export const normalizeColumn = (input: Partial<Column> & Record<string, unknown>
     uploadPath: typeof input.uploadPath === "string" ? input.uploadPath : "uploads",
   };
   if (typeof input.label === "string") column.label = input.label.trim().slice(0, 100);
+  const levels = cleanLevels(input.onlyLevels);
+  if (levels.length) column.onlyLevels = levels;
   if (typeof input.displayField === "string") column.displayField = input.displayField;
   if (column.type === "department" && typeof input.fromUser === "string" && input.fromUser) column.fromUser = input.fromUser;
   if (column.type === "relation" && !column.multiple && input.inline) column.inline = true;
@@ -251,12 +253,22 @@ export const normalizeColumn = (input: Partial<Column> & Record<string, unknown>
 };
 
 // Fields of a column that can be changed via PUT /schema/:table/column/:name
-const UPDATABLE = ["label", "type", "showInTable", "required", "indexed", "options", "default", "autonumber", "formula", "rollup", "inline"] as const;
+const UPDATABLE = ["label", "type", "showInTable", "required", "indexed", "options", "default", "autonumber", "formula", "rollup", "inline", "onlyLevels"] as const;
+
+// "Only these levels see this field": level keys ("manager", "accountant")
+const cleanLevels = (v: unknown): string[] =>
+  Array.isArray(v) ? [...new Set(v.map(String).filter((l) => /^[a-z0-9-]{1,60}$/.test(l)))].slice(0, 20) : [];
 
 export const applyColumnUpdate = (column: Column, payload: Record<string, unknown>): Column => {
   const updated: Column = { ...column };
   for (const key of UPDATABLE) {
     if (payload[key] === undefined) continue;
+    if (key === "onlyLevels") {
+      const levels = cleanLevels(payload.onlyLevels);
+      if (levels.length) updated.onlyLevels = levels;
+      else delete updated.onlyLevels;
+      continue;
+    }
     if (key === "type") {
       const type = canonicalType(payload.type);
       if (type !== column.type && (ID_TYPES.includes(type) || ID_TYPES.includes(column.type))) {
@@ -329,8 +341,10 @@ export const applyColumnUpdate = (column: Column, payload: Record<string, unknow
 };
 
 // Which field of a table's records to show when another table links to it.
+// A field only some levels see is never used: names appear in links,
+// notifications and emails for everyone.
 export const pickDisplayField = (refSchema: TableSchema | null | undefined, displayField?: string): string => {
-  const columns = refSchema?.columns ?? [];
+  const columns = (refSchema?.columns ?? []).filter((c) => !c.onlyLevels?.length);
   if (displayField && columns.some((c) => c.name === displayField)) return displayField;
   // a text column names a record best ("Anu Thomas", not "PAT-0001"); a
   // reference number when there's no text (invoices)
@@ -346,3 +360,13 @@ export const columnByNameOrLabel = (schema: TableSchema, key: string) =>
   schema.columns.find((c) => c.name === key) ??
   schema.columns.find((c) => (c.label ?? "").toLowerCase() === key.toLowerCase()) ??
   schema.columns.find((c) => c.name.toLowerCase() === key.toLowerCase());
+
+// The field that names each record (links, notifications, emails) is seen by
+// everyone who can use the table, so it can't be limited to some levels.
+export const assertNameOpen = (columns: Column[], column: Column) => {
+  if (!column.onlyLevels?.length) return;
+  const without = columns.map((c) => (c.name === column.name ? { ...c, onlyLevels: undefined } : c));
+  if (pickDisplayField({ columns: without } as unknown as TableSchema) === column.name) {
+    throw new HttpError(400, `"${column.label || column.name}" names each record (in links, notifications and emails), so everyone who can use the table sees it`);
+  }
+};

@@ -123,6 +123,10 @@ r.get("/ai/usage", adminOnly, handle(ai.aiUsageHandler));
 // Ask Zenin: anyone it's switched on for
 r.get("/ai/assistant", requireAuth, handle(ai.assistantHandler));
 r.post("/ai/ask", requireAuth, handle(ai.askHandler));
+// change access with AI: suggestions with a preview; an admin applies them
+r.get("/ai/access", adminOnly, handle(ai.accessAvailableHandler));
+r.post("/ai/access", adminOnly, handle(ai.accessAskHandler));
+r.post("/ai/access/apply", adminOnly, handle(ai.accessApplyHandler));
 
 // apps (Projects, HR, ...): catalog, preview, install, remove
 r.get("/apps", adminOnly, handle(apps.listAppsHandler));

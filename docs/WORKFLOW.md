@@ -89,12 +89,20 @@ role per part, all with the same `app_level`. A person has a main role
 (**Admin** or **Member**) plus their level roles; rights add up
 (`mergePermissions`: where one role shows the whole table, "own only" extras
 from others are dropped; nobody gets more than one of their roles gave).
-- **Administration → Access levels** (`GET /access-levels`): one card per
-  app, a level picker (a list from five levels on), and per table one
-  choice (No access / View / View and add / View, add and edit / Everything
-  / Custom… with the four ticks) plus **Only their own**. `PUT
-  /access-levels/:app/:level { permissions }` replaces what the level may do
-  in the app's tables (a table of another app is refused).
+- **Administration → Access levels** (`GET /access-levels`): **one app at a
+  time, as a grid.** The apps are listed on the left (a list with search from
+  nine apps on; a dropdown on phones); `?app=` opens one, and a table's Access
+  card links to its app. Rows are the app's tables (the name column stays put
+  while the levels scroll sideways); columns are its levels with how many
+  people have each, and a menu for Reset / Remove. Each cell: one choice
+  (No access / View / View + add / View, add, edit / Everything / Custom…)
+  and a person toggle for **only their own records**. A cell that matches
+  no simple choice shows a short summary ("View, edit") and its four ticks
+  after **Change**. Changed cells are outlined; one **Save changes** for the
+  app, with a count; changes are kept when switching apps (a dot marks the
+  app). Saving sends `PUT /access-levels/:app/:level { permissions }` for
+  each changed level, which replaces what it may do in the app's tables (a
+  table of another app is refused).
 - **Add a level** (`POST /access-levels/:app { name }`): starts with no
   access. **Remove level** (`DELETE …/:level`) only for added levels, and
   not while an approval option or Ask Zenin names it.

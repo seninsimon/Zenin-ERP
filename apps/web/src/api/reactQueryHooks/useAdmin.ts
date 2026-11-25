@@ -368,16 +368,22 @@ export const useAccessLevels = () =>
     queryFn: async () => (await api.get<LevelsData>("/access-levels")).data,
   });
 
-export const useSaveLevel = () => {
+// save what several levels of one app can do, with one message
+export const useSaveLevels = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ app, level, permissions }: { app: string; level: string; permissions: PermissionMap }) =>
-      (await api.put(`/access-levels/${app}/${level}`, { permissions })).data,
+    mutationFn: async ({ app, levels }: { app: string; levels: { level: string; permissions: PermissionMap }[] }) => {
+      for (const l of levels) await api.put(`/access-levels/${app}/${l.level}`, { permissions: l.permissions });
+    },
     onSuccess: () => {
       refreshAccess(qc);
-      notifySuccess("Saved", "What this level can do is updated");
+      notifySuccess("Saved", "Access levels are updated");
     },
-    onError: notifyError("Couldn't save"),
+    onError: (error) => {
+      // some may have saved before the error: show what's saved now
+      refreshAccess(qc);
+      notifyError("Couldn't save")(error);
+    },
   });
 };
 

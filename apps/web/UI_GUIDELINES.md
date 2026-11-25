@@ -504,6 +504,7 @@ Target: **WCAG 2.2 AA**.
 | Record values | `FieldValue` |
 | Nothing to show | `EmptyState` |
 | Explain an idea that isn't obvious | `HelpTip` / `WithHelp`, text in `lib/help.ts` (§9) |
+| Settings for many things × many options (access levels) | One thing at a time (a list on the left, a dropdown on phones), a grid with a sticky first column and `scope="col"` headers, changed cells outlined, one save bar with a count (`AccessLevelsPage.tsx`) |
 | Delete/disable confirmation | `confirmDanger` |
 | Dates, numbers, file names | `lib/format.ts` |
 | Navigation entries | `layout/nav.ts` |

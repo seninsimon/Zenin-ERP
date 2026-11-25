@@ -44,3 +44,44 @@
   outline: 2px solid var(--mantine-primary-color-filled);
   outline-offset: 2px;
 }
+
+/* Access levels grid: table names stay put while the levels scroll sideways */
+.gridScroll {
+  overflow-x: auto;
+}
+
+.levelGrid th,
+.levelGrid td {
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.stickyCol {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--app-surface);
+  min-width: 140px;
+  max-width: 200px;
+  white-space: normal !important;
+  border-right: 1px solid var(--app-border);
+}
+
+/* a cell changed but not saved yet */
+.changedCell {
+  border-radius: var(--mantine-radius-sm);
+  box-shadow: 0 0 0 2px var(--mantine-color-yellow-filled);
+  outline-offset: 2px;
+}
+
+.saveBar {
+  border-top: 1px solid var(--app-border);
+  background: var(--app-muted);
+}
+
+@media (max-width: 36em) {
+  .stickyCol {
+    min-width: 96px;
+    max-width: 120px;
+  }
+}

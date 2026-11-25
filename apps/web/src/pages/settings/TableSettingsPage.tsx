@@ -112,7 +112,7 @@ function WhoCanUse({ schema }: { schema: Schema }) {
           {data.roles.length === 0 && (
             <Text size="sm">
               <b>Only admins so far.</b> Give people a level in its app under App access (Users), and choose what each level can do on the{" "}
-              <Anchor component={Link} to="/settings/roles" inherit>
+              <Anchor component={Link} to={`/settings/roles?app=${encodeURIComponent(schema.app?.key ?? "my-tables")}`} inherit>
                 Access levels page
               </Anchor>
               .
@@ -128,6 +128,11 @@ function WhoCanUse({ schema }: { schema: Schema }) {
               </Text>
             </Group>
           ))}
+          {data.roles.length > 0 && (
+            <Anchor component={Link} to={`/settings/roles?app=${encodeURIComponent(schema.app?.key ?? "my-tables")}`} size="sm">
+              Change what each level can do
+            </Anchor>
+          )}
           <Text size="sm" c="dimmed">
             Admins can always do everything ({pluralize(data.admins, "person", "people")}).
             {split && schema.departments.length > 0 && ` People also need to be in ${joinOr(schema.departments.map((d) => d.name))}.`}

@@ -45,34 +45,94 @@ process.
 
 ## 2. Admin workflow: setting up access
 
-Four ideas, each with one job:
+The whole model in three sentences:
+1. **Everything is in apps.** For each app, a person has one **level**: No
+   access, Staff, Manager, or a level you added. Or they're an
+   **Administrator**, who can do everything.
+2. **A level says what it can do in each of the app's tables,** and whether
+   only in their own records.
+3. **Departments are just teams.** They limit records only on a table split
+   by department.
 
 | Concept | Decides | Set in |
 |---|---|---|
-| **App access** | What a person can do in each app: No access / Staff / Manager | Users → the person |
+| **Administrator** | Everything, including Administration | Users → the person (a switch) |
+| **App access** | Their level in each app: No access / Staff / Manager / an added level | Users → the person |
+| **Access levels** | What each level can do in each table of its app | Administration → Access levels |
 | **Department** | Which team they're in (and, on "each department" tables, whose records they see) | Users → the person |
 | **Who sees the records** | Per table: everyone with access, or split by department | Tables → the table → Access |
 | **Visible to** | Which departments see one record (only on "each department" tables) | The record form |
 
 **With apps** (the usual way): pick an organization type in **Manage apps**.
-It creates the apps, their roles and starter departments. Then **Add person**
+It creates the apps, their levels and starter departments. Then **Add person**
 (Users) for each person: name, login, department, and app access. With the
 People directory installed, the same form adds their directory entry, linked
 to the login, with their department filled in.
 
-**Roles under the hood.** A person has a main role (**Admin**, **Member**,
-or a custom role) plus their app roles ("Projects · Manager"); rights add up
-(`mergePermissions`, `src/auth/mergePermissions.ts`: where one role shows the
-whole table, "own only" extras from others are dropped; nobody gets more
-than one of their roles gave). Approval steps accept any of a person's roles.
-Each app brings its own roles on install (`roles.app_key`, `app_level`);
-they're edited like any role but go with the app. Apps installed before this
-get theirs once, at API start-up (`ensureAppRoles()`).
+**The person dialog** prevents mistakes instead of explaining them:
+- **Administrator** is one switch; it hides App access (they can do
+  everything). The API still takes `roleId` (Admin or Member).
+- **Same access as…** copies another person's departments and app levels
+  into the form (never Administrator). Nothing is saved until Save.
+- **A suggestion** for a new person in a department: the app levels at least
+  half of the people there have ("Most people in their department have: …
+  [Use these]"). Worked out in the browser from the users list.
+- **A warning at the moment it matters:** choosing Manager in an app with a
+  `managerNote` in its blueprint shows it ("They'll see everyone's salary and
+  payslips"). Payroll, HR & leave, Clinic and Expense claims have one.
+- Apps with more than two levels show a list instead of buttons.
 
-**By hand** (your own tables): create **Departments**; create the **Table**
-and its columns; tick View / Create / Edit / Delete per table in **Roles**
-(create, edit or delete include view; the built-in **Admin** role always
-has full access); give people that role on the **Users** page.
+**Levels under the hood** (`src/auth/levels.ts`). A level is the app's role
+of that level (`roles.app_key`, `app_level`; "HR & leave · Manager"). An app
+shown as one in the launcher (Company = People + Customers + Products) has one
+role per part, all with the same `app_level`. A person has a main role
+(**Admin** or **Member**) plus their level roles; rights add up
+(`mergePermissions`: where one role shows the whole table, "own only" extras
+from others are dropped; nobody gets more than one of their roles gave).
+- **Administration → Access levels** (`GET /access-levels`): one card per
+  app, a level picker (a list from five levels on), and per table one
+  choice (No access / View / View and add / View, add and edit / Everything
+  / Custom… with the four ticks) plus **Only their own**. `PUT
+  /access-levels/:app/:level { permissions }` replaces what the level may do
+  in the app's tables (a table of another app is refused).
+- **Add a level** (`POST /access-levels/:app { name }`): starts with no
+  access. **Remove level** (`DELETE …/:level`) only for added levels, and
+  not while an approval option or Ask Zenin names it.
+- **Reset to the app's defaults** (`POST …/:level/reset`): Staff and Manager
+  of a ready-made app back to its blueprint (`defaultRolePerms()`); tables
+  added to the app keep their rights.
+- Approval options ("Only these levels can choose this") and Ask Zenin's
+  "Only these levels" offer levels.
+- The API still accepts roles of no app (`POST /roles`, used by the tests).
+  The screens never make them.
+
+**Moving older roles** (roles of no app other than Admin and Member, from
+before levels). Access levels shows them in a yellow box. **Preview the
+move** (`POST /access-levels/move { apply: false }`) works the whole move out
+in a transaction and rolls it back; **Move older roles** (`apply: true`)
+keeps it. Nothing moves by itself.
+- For each person with an older role, per app the role is about (rights
+  there, or named by an option there), their roles about that app become
+  one level with exactly the merged rights. Apps of any app role taken off
+  are redone too, so nothing it gave elsewhere goes missing.
+- **No clutter:** if the merged rights equal one of the app's levels the
+  person had (Sales rep on top of Manager), they keep that level (so they
+  still count as its Manager for reminders). Jobs that only view the same
+  tables share **Viewer** ("Viewer (all tables)", "Viewer (Orders,
+  Products, Companies)"); jobs that only reach their own records share **Own
+  records**. Otherwise the level is named after the role ("Sales · Sales
+  rep", "Staff + Ops").
+- Approval options and Ask Zenin are rewritten to the new levels that came
+  from a role they named. The older roles are deleted; a copy is kept in
+  `app_state` `accessMoveBackup`.
+- **The check:** before and after, for every person: rights per table,
+  every limited choice option, Ask Zenin, the apps they manage, and the
+  tables they can edit in full. It tries twice (first reusing levels freely,
+  then strictly for roles that options or Ask Zenin name), each in a
+  savepoint. If anyone would differ either way, nothing changes, and the 409
+  says who and what ("…: the apps they manage. Nothing was changed.").
+- The demo (`pnpm seed`) puts its 17 tables in 7 apps and runs the move:
+  its 9 job roles become 26 levels.
 - Mark columns **Required** where needed, and the ones people sort by as
   **Indexed** (text, textarea, number, date, boolean).
 

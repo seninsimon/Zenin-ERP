@@ -21,7 +21,6 @@ import {
   IconFileImport,
   IconLock,
   IconPlus,
-  IconShieldLock,
   IconUsers,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -29,7 +28,7 @@ import dayjs from "dayjs";
 import { Link } from "react-router-dom";
 
 import { getAuditLog, getJobs } from "../api/api";
-import { useDepartments, useRoles, useUsers } from "../api/reactQueryHooks/useAdmin";
+import { useDepartments, useUsers } from "../api/reactQueryHooks/useAdmin";
 import { useTables } from "../api/reactQueryHooks/useTables";
 import { useCurrentUser } from "../auth/AuthContext";
 import { JobStatusBadge, jobResultSummary } from "../components/JobStatusBadge";
@@ -53,15 +52,18 @@ const greeting = () => {
 
 function GetStarted({ tableCount }: { tableCount: number }) {
   const { data: departments = [], isLoading: l1 } = useDepartments();
-  const { data: roles = [], isLoading: l2 } = useRoles();
   const { data: users = [], isLoading: l3 } = useUsers();
-  if (l1 || l2 || l3) return null;
+  if (l1 || l3) return null;
 
   const steps = [
     { done: departments.length > 0, label: "Create departments", to: "/settings/departments", icon: IconBuilding },
     { done: tableCount > 0, label: "Add apps (or create your own tables)", to: "/settings/apps", icon: IconApps },
-    { done: roles.some((r) => !r.isAdmin), label: "Create a role with table permissions", to: "/settings/roles", icon: IconShieldLock },
-    { done: users.length > 1, label: "Add users and assign departments", to: "/settings/users", icon: IconUsers },
+    {
+      done: users.some((u) => !u.role?.isAdmin && Object.keys(u.appAccess ?? {}).length > 0),
+      label: "Add people and give them app access",
+      to: "/settings/users",
+      icon: IconUsers,
+    },
   ];
   const completed = steps.filter((s) => s.done).length;
   if (completed === steps.length) return null;

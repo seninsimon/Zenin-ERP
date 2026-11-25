@@ -207,7 +207,7 @@ These are set in the ERP, under **Administration**. No `.env` editing.
 | Email (notifications, password links, morning summary) | **Email**: choose Gmail, enter the address and its 16-letter app password, **Send a test email** |
 | Team chat and comments on records | **Chat** (team chat is off until you switch it on) |
 | AI (Beta): drafting apps, Ask Zenin | **AI**: choose Claude, Gemini or ChatGPT, paste the key, **Test**. The same page shows the estimated cost and sets limits |
-| People, roles, departments | **Users**, **Roles**, **Departments** |
+| People (Administrator, App access), what each level can do, teams | **Users**, **Access levels**, **Departments** |
 
 ---
 

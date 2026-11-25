@@ -22,6 +22,8 @@ import { createDepartment, createRole, createUser, findUserForLogin } from "../r
 import { backfillAutonumber, syncCounterFromData } from "../schema/autonumber.js";
 import { applyFormulas } from "../schema/formula.js";
 import { createTable, getSchema, invalidateSchemas, updateTableSettings } from "../schema/schemaRepo.js";
+import { createOwnApp, ensureMyTables, placeNewTable } from "../apps/ownApps.js";
+import { moveOlderRoles } from "../auth/levels.js";
 import { storage, UPLOAD_URL_PREFIX } from "../storage.js";
 
 const DEMO_PASSWORD = "demo-pass-123";
@@ -306,6 +308,17 @@ const DEPARTMENTS: [string, string][] = [
   ["Support", "Customer support"], ["All staff", "Shared lists everyone can use (staff directory, customers, products)"],
 ];
 
+// the demo's tables, in apps (each with its own Staff and Manager)
+const DEMO_APPS: { name: string; icon: string; tables: string[] }[] = [
+  { name: "Sales", icon: "IconShoppingCart", tables: ["companies", "contacts", "deals", "products", "orders"] },
+  { name: "Purchasing", icon: "IconTruck", tables: ["suppliers", "purchase_orders"] },
+  { name: "People & HR", icon: "IconUsers", tables: ["employees", "payroll", "leave_requests"] },
+  { name: "Team work", icon: "IconClipboardList", tables: ["projects", "tasks", "time_logs"] },
+  { name: "IT", icon: "IconTool", tables: ["assets", "it_tickets"] },
+  { name: "Expenses", icon: "IconCash", tables: ["expenses"] },
+  { name: "Support", icon: "IconHeadset", tables: ["support_tickets"] },
+];
+
 const V = { view: true }, VCE = { view: true, create: true, edit: true };
 const ALL = { view: true, create: true, edit: true, delete: true };
 // expense claims are personal: staff see only their own (managers and Finance see all)
@@ -440,6 +453,17 @@ async function main() {
     }
   }
   console.log(`  ${DEPARTMENTS.length} departments, ${TABLES.length} tables, ${ROLES.length} roles, ${USERS.length} users`);
+
+  /* ---------- apps and access levels ---------- */
+  // the tables go into apps; then the job roles become levels in those apps
+  // ("Sales · Sales rep"), with exactly the same rights (checked person by person)
+  for (const a of DEMO_APPS) {
+    const app = await createOwnApp({ name: a.name, icon: a.icon }, "");
+    for (const t of a.tables) await placeNewTable(t, app.key, "none");
+  }
+  await ensureMyTables();
+  const moved = await moveOlderRoles(true);
+  console.log(`  ${DEMO_APPS.length} apps; the ${moved.roles.length} job roles became ${moved.levels.length} access levels`);
 
   /* ---------- staff directory ---------- */
   const employees: { id: string; name: string; team: string }[] = [];

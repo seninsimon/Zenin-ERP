@@ -88,7 +88,8 @@ function AskWho({ askRoles }: { askRoles: string[] }) {
   const save = useSaveAi();
   const { data: roles = [] } = useRoles();
   const [some, setSome] = useState(askRoles.length > 0);
-  const options = roles.filter((r) => !r.isAdmin).map((r) => ({ value: r._id, label: r.name }));
+  // app levels ("HR & leave · Manager"); an older role stays listed while it's chosen
+  const options = roles.filter((r) => !r.isAdmin && (r.appKey || askRoles.includes(r._id))).map((r) => ({ value: r._id, label: r.name }));
   return (
     <Stack gap="xs" pl={54} maw={560}>
       <Text size="sm" fw={500}>
@@ -103,15 +104,15 @@ function AskWho({ askRoles }: { askRoles: string[] }) {
         }}
         data={[
           { value: "everyone", label: "Everyone" },
-          { value: "some", label: "Only these roles" },
+          { value: "some", label: "Only these levels" },
         ]}
         aria-label="Who can use Ask Zenin"
         style={{ alignSelf: "flex-start" }}
       />
       {some && (
         <MultiSelect
-          aria-label="Roles that can use Ask Zenin"
-          placeholder={askRoles.length ? undefined : "Choose roles (admins always can)"}
+          aria-label="Levels that can use Ask Zenin"
+          placeholder={askRoles.length ? undefined : "Choose levels (admins always can)"}
           data={options}
           value={askRoles}
           onChange={(v) => save.mutate({ askRoles: v })}
@@ -120,7 +121,7 @@ function AskWho({ askRoles }: { askRoles: string[] }) {
       )}
       {some && !askRoles.length && (
         <Text size="xs" c="dimmed">
-          Until you choose a role, everyone can use it.
+          Until you choose a level, everyone can use it.
         </Text>
       )}
     </Stack>

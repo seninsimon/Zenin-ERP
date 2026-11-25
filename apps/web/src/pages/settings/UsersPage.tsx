@@ -22,7 +22,7 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconEdit, IconKey, IconListCheck, IconMail, IconPlus, IconTrash, IconUserCheck, IconUserOff, IconUsers } from "@tabler/icons-react";
+import { IconAlertTriangle, IconEdit, IconKey, IconListCheck, IconMail, IconPlus, IconTrash, IconUserCheck, IconUserOff, IconUsers } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useQuery } from "@tanstack/react-query";
 
@@ -121,27 +121,78 @@ function AppAccessFields({
           everything, including approvals.
         </Text>
       </div>
-      {options.map((o) => (
-        <Group key={o.key} justify="space-between" wrap="wrap" gap="xs" py={4}>
-          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-            <AppIcon name={o.icon} size={28} />
-            <Text size="sm" truncate>
-              {o.name}
-            </Text>
-          </Group>
-          <SegmentedControl
-            size="xs"
-            aria-label={`Access to ${o.name}`}
-            value={value[o.key] ?? NONE}
-            onChange={(level) => onChange({ ...value, [o.key]: level })}
-            // given access stands out; "No access" stays neutral
-            color={(value[o.key] ?? NONE) === NONE ? undefined : theme.primaryColor}
-            data={[{ value: NONE, label: "No access" }, ...o.levels.map((l) => ({ value: l.level, label: l.label }))]}
-          />
-        </Group>
-      ))}
+      {options.map((o) => {
+        const data = [{ value: NONE, label: "No access" }, ...o.levels.map((l) => ({ value: l.level, label: l.label }))];
+        const current = value[o.key] ?? NONE;
+        return (
+          <div key={o.key}>
+            <Group justify="space-between" wrap="wrap" gap="xs" py={4}>
+              <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                <AppIcon name={o.icon} size={28} />
+                <Text size="sm" truncate>
+                  {o.name}
+                </Text>
+              </Group>
+              {data.length <= 3 ? (
+                <SegmentedControl
+                  size="xs"
+                  aria-label={`Access to ${o.name}`}
+                  value={current}
+                  onChange={(level) => onChange({ ...value, [o.key]: level })}
+                  // given access stands out; "No access" stays neutral
+                  color={current === NONE ? undefined : theme.primaryColor}
+                  data={data}
+                />
+              ) : (
+                // levels you added make the row too long for buttons: a list instead
+                <Select
+                  size="xs"
+                  w={200}
+                  aria-label={`Access to ${o.name}`}
+                  value={current}
+                  allowDeselect={false}
+                  onChange={(level) => level && onChange({ ...value, [o.key]: level })}
+                  data={data}
+                />
+              )}
+            </Group>
+            {/* the moment it matters: what making them Manager means */}
+            {current === "manager" && o.managerNote && (
+              <Text size="xs" c="var(--mantine-color-yellow-light-color)" pl={36} pb={4}>
+                <IconAlertTriangle size={12} style={{ verticalAlign: "-1px" }} /> {o.managerNote}
+              </Text>
+            )}
+          </div>
+        );
+      })}
     </Stack>
   );
+}
+
+// a main role from before access levels (not Administrator, not Member)
+const olderRoleOf = (u: User) => (!u.role?.isAdmin && u.role?.name && u.role.name.toLowerCase() !== "member" ? u.role.name : null);
+
+// "Most people in Kochi have …": app levels most of the people sharing a
+// department have, as a suggestion for someone new there
+function suggestedAccess(people: User[], departmentIds: string[]) {
+  const peers = people.filter((p) => p.isActive && !p.role?.isAdmin && p.departments.some((d) => departmentIds.includes(d._id)));
+  if (peers.length < 2) return null;
+  const counts = new Map<string, Map<string, number>>();
+  for (const p of peers) {
+    for (const [app, level] of Object.entries(p.appAccess ?? {})) {
+      const byLevel = counts.get(app) ?? new Map<string, number>();
+      byLevel.set(level, (byLevel.get(level) ?? 0) + 1);
+      counts.set(app, byLevel);
+    }
+  }
+  const out: Record<string, string> = {};
+  for (const [app, byLevel] of counts) {
+    const total = [...byLevel.values()].reduce((a, b) => a + b, 0);
+    if (total * 2 < peers.length) continue; // fewer than half have it
+    // Staff when most of them are Staff or above; otherwise their most common level
+    out[app] = byLevel.has("staff") ? "staff" : [...byLevel.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /* ---------------- create / edit ---------------- */
@@ -157,8 +208,11 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
   const hasDirectory = (tables as { blueprintKey?: string | null }[]).some((t) => t.blueprintKey === "people.employees");
   const [addToDirectory, setAddToDirectory] = useState(true);
   // the main role: Admin, Member (rights from app access) or a custom role; app roles come through app access
-  const mainRoles = roles.filter((r) => !r.appKey);
   const memberId = roles.find((r) => r.name.toLowerCase() === "member" && !r.appKey)?._id ?? "";
+  const adminId = roles.find((r) => r.isAdmin)?._id ?? "";
+  const { data: people = [] } = useUsers();
+  // "Same access as…": whose access was copied in (until the form closes)
+  const [copiedFrom, setCopiedFrom] = useState<string | null>(null);
   const create = useCreateUser();
   const update = useUpdateUser();
   const isSelf = user?._id === me._id;
@@ -194,6 +248,7 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
   useEffect(() => {
     if (!opened) return;
     setShowAccess(false);
+    setCopiedFrom(null);
     const values: FormValues = user
       ? {
           username: user.username,
@@ -215,6 +270,12 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
   }, [opened, user, memberId]);
 
   const selectedRole = roles.find((r) => r._id === form.values.roleId);
+  // a main role from before access levels, kept until the move
+  const olderRole = selectedRole && !selectedRole.isAdmin && !selectedRole.appKey && selectedRole._id !== memberId ? selectedRole.name : null;
+  // a new person in a department: the app levels most people there have
+  const noAccessYet = Object.values(form.values.appAccess).every((l) => !l || l === NONE);
+  const suggestion =
+    !user && !selectedRole?.isAdmin && noAccessYet && form.values.departmentIds.length ? suggestedAccess(people, form.values.departmentIds) : null;
 
   const submit = form.onSubmit(async (v) => {
     const data: UserInput = {
@@ -290,15 +351,29 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
             />
           )}
 
-          <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            <Select
-              label={<WithHelp topic="mainRole">Role</WithHelp>}
-              description="Most people are Members: what they can do comes from App access below"
-              withAsterisk
-              data={mainRoles.map((r) => ({ value: r._id, label: r.isAdmin ? `${r.name} (can do everything)` : r.name }))}
-              disabled={isSelf}
-              {...form.getInputProps("roleId")}
+          <div>
+            <Switch
+              label={<WithHelp topic="administrator">Administrator</WithHelp>}
+              description={isSelf ? "You can't change this for yourself" : "Can do everything, including Administration. Keep it to one or two people."}
+              checked={Boolean(selectedRole?.isAdmin)}
+              disabled={isSelf || !adminId}
+              onChange={(e) =>
+                form.setFieldValue("roleId", e.currentTarget.checked ? adminId : user && !user.role.isAdmin ? user.role._id : memberId)
+              }
             />
+            {form.errors.roleId && (
+              <Text size="xs" c="red" mt={4}>
+                {form.errors.roleId}
+              </Text>
+            )}
+            {olderRole && (
+              <Text size="xs" c="dimmed" mt={6}>
+                Also has the older role <b>{olderRole}</b>. Move older roles on the Access levels page.
+              </Text>
+            )}
+          </div>
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <MultiSelect
               label={<WithHelp topic="departments">Departments</WithHelp>}
               description={
@@ -311,7 +386,47 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
               clearable
               {...form.getInputProps("departmentIds")}
             />
+            {!selectedRole?.isAdmin && (
+              <Select
+                label={<WithHelp topic="sameAccess">Same access as…</WithHelp>}
+                description="Copy someone's departments and app levels"
+                placeholder="Choose a person"
+                data={people
+                  .filter((p) => p._id !== user?._id && !p.role?.isAdmin)
+                  .map((p) => ({ value: p._id, label: p.fullName || p.username }))}
+                searchable
+                value={null}
+                onChange={(id) => {
+                  const p = people.find((x) => x._id === id);
+                  if (!p) return;
+                  form.setFieldValue("departmentIds", p.departments.map((d) => d._id));
+                  form.setFieldValue("appAccess", { ...(p.appAccess ?? {}) });
+                  setCopiedFrom(p.fullName || p.username);
+                }}
+              />
+            )}
           </SimpleGrid>
+          {copiedFrom && (
+            <Text size="xs" c="dimmed" mt={-8}>
+              Copied from {copiedFrom}. Nothing is saved until you press {user ? "Save" : "Add person"}.
+            </Text>
+          )}
+          {suggestion && (
+            <Group gap="xs" mt={-8} wrap="wrap">
+              <Text size="xs" c="dimmed">
+                Most people in their department have:{" "}
+                {Object.entries(suggestion)
+                  .map(([app, level]) => {
+                    const o = accessOptions.find((x) => x.key === app);
+                    return `${o?.name ?? app} (${o?.levels.find((l) => l.level === level)?.label ?? level})`;
+                  })
+                  .join(", ")}
+              </Text>
+              <Button size="compact-xs" variant="light" onClick={() => form.setFieldValue("appAccess", { ...suggestion })}>
+                Use these
+              </Button>
+            </Group>
+          )}
 
           {!selectedRole?.isAdmin && accessOptions.length > 0 && (
             <AppAccessFields
@@ -467,12 +582,23 @@ export default function UsersPage() {
       },
       {
         id: "role",
-        header: "Role",
+        header: "Administrator",
         sortable: true,
         width: 150,
         mobile: "subtitle",
-        accessor: (u) => u.role?.name ?? "",
-        cell: (u) => <Badge color={u.role?.isAdmin ? "red" : "blue"}>{u.role?.name}</Badge>,
+        accessor: (u) => (u.role?.isAdmin ? "Administrator" : olderRoleOf(u) ?? ""),
+        cell: (u) =>
+          u.role?.isAdmin ? (
+            <Badge color="red">Administrator</Badge>
+          ) : olderRoleOf(u) ? (
+            <Tooltip label="A role from before access levels. Move older roles on the Access levels page.">
+              <Badge variant="default">Older role: {olderRoleOf(u)}</Badge>
+            </Tooltip>
+          ) : (
+            <Text span c="dimmed" size="sm">
+              No
+            </Text>
+          ),
       },
       {
         id: "apps",
@@ -483,13 +609,14 @@ export default function UsersPage() {
           if (u.role?.isAdmin) {
             return (
               <Text span c="dimmed" size="sm">
-                All (admin)
+                Everything
               </Text>
             );
           }
           const entries = Object.entries(u.appAccess ?? {}).map(([key, level]) => {
-            const name = accessOptions.find((o) => o.key === key)?.name ?? key;
-            return `${name}: ${level.charAt(0).toUpperCase()}${level.slice(1)}`;
+            const option = accessOptions.find((o) => o.key === key);
+            const label = option?.levels.find((l) => l.level === level)?.label ?? `${level.charAt(0).toUpperCase()}${level.slice(1)}`;
+            return `${option?.name ?? key}: ${label}`;
           });
           if (!entries.length) {
             return (

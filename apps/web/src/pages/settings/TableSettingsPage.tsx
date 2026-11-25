@@ -95,7 +95,7 @@ function AppChoice({ schema }: { schema: Schema }) {
 }
 
 // "Who can use this table": every role that opens it, in plain words, from
-// the server's own rules. Changing it happens on the Users and Roles pages.
+// the server's own rules. Changing it happens on the Users and Access levels pages.
 function WhoCanUse({ schema }: { schema: Schema }) {
   const { data, isLoading } = useTableUse(schema.tableName);
   const split = schema.byDepartment !== false;
@@ -111,9 +111,9 @@ function WhoCanUse({ schema }: { schema: Schema }) {
         <>
           {data.roles.length === 0 && (
             <Text size="sm">
-              <b>Only admins so far.</b> Give people Staff or Manager in its app under App access (Users), or add it to a role on the{" "}
+              <b>Only admins so far.</b> Give people a level in its app under App access (Users), and choose what each level can do on the{" "}
               <Anchor component={Link} to="/settings/roles" inherit>
-                Roles page
+                Access levels page
               </Anchor>
               .
             </Text>

@@ -53,6 +53,7 @@ export const APP_ICONS = [
   "IconUsers",
   "IconSchool",
   "IconStethoscope",
+  "IconHeadset",
   "IconHome",
 ];
 

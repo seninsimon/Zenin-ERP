@@ -8,10 +8,25 @@ export const HELP = {
   users: {
     title: "How access works",
     text: [
-      "Each person gets an access level per app: No access, Staff or Manager. Staff do the everyday work; Managers see everything in the app and approve.",
-      "Admins can do everything, including these settings.",
+      "Each person gets a level in each app: No access, Staff or Manager (or a level you added). Staff do the everyday work; Managers see everything in the app and approve.",
+      "Administrators can do everything, including these settings.",
     ],
     example: "A nurse is Staff in Clinic. The head nurse is Manager.",
+  },
+  administrator: {
+    title: "Administrator",
+    text: [
+      "Can do everything: every app, every record, and all of Administration.",
+      "Keep it to one or two people. Everyone else gets what they need through App access.",
+    ],
+  },
+  levels: {
+    title: "Access levels",
+    text: [
+      "Every app has levels: Staff and Manager, and any you add. A level says what its people can do in each of the app's tables.",
+      "You give someone a level in each app with App access on the Users page.",
+    ],
+    example: "Add an Accountant level to Billing that can view and edit invoices, but not delete them.",
   },
   appAccess: {
     title: "App access",
@@ -20,14 +35,6 @@ export const HELP = {
       "Managers see and change everything in the app, and approve requests.",
     ],
     example: "Staff in HR can ask for leave. A Manager in HR approves it and sees everyone's.",
-  },
-  mainRole: {
-    title: "Role",
-    text: [
-      "Admin: can do everything, including Administration. Keep this to one or two people.",
-      "Member: what they can do comes only from App access below. Choose this for almost everyone.",
-      "A role you made on the Roles page adds the rights you gave it there.",
-    ],
   },
   departments: {
     title: "Departments",
@@ -43,6 +50,10 @@ export const HELP = {
       "A role is a list of what people may do in each table: view, add, edit or delete.",
       "Each app brings its own Staff and Manager roles. You give them to people with App access on the Users page, so most companies never need to make a role here.",
     ],
+  },
+  sameAccess: {
+    title: "Same access as…",
+    text: ["Copies another person's departments and app levels into this form. Nothing is saved until you press Save.", "It never copies Administrator."],
   },
   ownOnly: {
     title: "Own records only",
@@ -117,7 +128,7 @@ export const HELP = {
   whoCanChoose: {
     title: "Who can choose this",
     text: [
-      "Makes this option an approval step: only people with the chosen roles can set it. Leave it empty to let anyone who can edit.",
+      "Makes this option an approval step: only people with the chosen levels can set it. Leave it empty to let anyone who can edit.",
       "Admins can always choose it. Nobody else can approve a record that is their own.",
     ],
     example: "Only HR Managers can set a leave request's Status to Approved.",

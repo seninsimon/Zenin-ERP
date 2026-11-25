@@ -31,7 +31,7 @@ export const ADMIN_NAV: NavItem[] = [
   { label: "Email", to: "/settings/email", icon: IconMail, description: "Send notifications and password links by email" },
   { label: "AI", to: "/settings/ai", icon: IconSparkles, description: "Which AI drafts apps (Claude, Gemini or ChatGPT), and its key" },
   { label: "Chat", to: "/settings/chat", icon: IconMessages, description: "Team chat and comments on records" },
-  { label: "Roles & permissions", to: "/settings/roles", icon: IconShieldLock, description: "What each role may do" },
+  { label: "Access levels", to: "/settings/roles", icon: IconShieldLock, description: "What Staff, Managers and other levels can do in each app" },
   { label: "Departments", to: "/settings/departments", icon: IconBuilding, description: "Who sees which data" },
   { label: "Audit log", to: "/settings/audit", icon: IconHistory, description: "Who changed what, when" },
 ];

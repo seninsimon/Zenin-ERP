@@ -47,6 +47,8 @@ export type AppAccessOption = {
   name: string;
   icon: string;
   levels: { level: string; label: string; description: string }[];
+  // shown when someone is made Manager: "They'll see everyone's salary"
+  managerNote?: string;
 };
 
 export type User = {
@@ -319,3 +321,106 @@ export const useTableUse = (table: string) =>
     queryFn: async () => (await api.get<TableUse>(`/schema/${table}/access`)).data,
     refetchOnMount: "always",
   });
+
+/* ---------------- access levels (Staff, Manager and added levels, per app) ---------------- */
+
+export type AccessLevel = {
+  level: string;
+  name: string;
+  // added by you (Staff and Manager come with every app)
+  custom: boolean;
+  people: number;
+  permissions: PermissionMap;
+};
+
+export type AppLevels = {
+  key: string;
+  name: string;
+  icon: string;
+  tables: string[];
+  levels: AccessLevel[];
+  // a ready-made app: Staff and Manager can go back to what it came with
+  resettable: boolean;
+  managerNote: string | null;
+};
+
+export type LevelsData = {
+  apps: AppLevels[];
+  // roles of no app, from before levels: moved with a preview
+  olderRoles: { _id: string; name: string; people: number; tables: string[] }[];
+  admins: number;
+};
+
+export type MovePreview = {
+  moved: boolean;
+  roles: { name: string; people: number; becomes: string[] }[];
+  levels: { app: string; name: string; people: number }[];
+};
+
+// levels change what people can do: refresh everything that shows it
+const refreshAccess = (qc: ReturnType<typeof useQueryClient>) => {
+  for (const key of ["accessLevels", "roles", "users", "appAccessOptions", "tables", "schema", "tableUse"]) qc.invalidateQueries({ queryKey: [key] });
+};
+
+export const useAccessLevels = () =>
+  useQuery({
+    queryKey: ["accessLevels"],
+    queryFn: async () => (await api.get<LevelsData>("/access-levels")).data,
+  });
+
+export const useSaveLevel = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ app, level, permissions }: { app: string; level: string; permissions: PermissionMap }) =>
+      (await api.put(`/access-levels/${app}/${level}`, { permissions })).data,
+    onSuccess: () => {
+      refreshAccess(qc);
+      notifySuccess("Saved", "What this level can do is updated");
+    },
+    onError: notifyError("Couldn't save"),
+  });
+};
+
+export const useAddLevel = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ app, name }: { app: string; name: string }) =>
+      (await api.post<{ level: string; name: string }>(`/access-levels/${app}`, { name })).data,
+    onSuccess: () => refreshAccess(qc),
+  });
+};
+
+export const useDeleteLevel = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ app, level }: { app: string; level: string }) => (await api.delete(`/access-levels/${app}/${level}`)).data,
+    onSuccess: () => {
+      refreshAccess(qc);
+      notifySuccess("Level removed", "Its people no longer have it");
+    },
+    onError: notifyError("Couldn't remove the level"),
+  });
+};
+
+export const useResetLevel = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ app, level }: { app: string; level: string }) => (await api.post(`/access-levels/${app}/${level}/reset`)).data,
+    onSuccess: () => {
+      refreshAccess(qc);
+      notifySuccess("Back to the defaults", "This level has what the app came with");
+    },
+    onError: notifyError("Couldn't reset"),
+  });
+};
+
+// apply false: a preview, nothing changes
+export const useMoveOlderRoles = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (apply: boolean) => (await api.post<MovePreview>("/access-levels/move", { apply })).data,
+    onSuccess: (data) => {
+      if (data.moved) refreshAccess(qc);
+    },
+  });
+};

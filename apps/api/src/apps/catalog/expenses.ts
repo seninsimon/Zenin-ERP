@@ -3,6 +3,7 @@ import type { AppBlueprint } from "../types.js";
 
 export const expenses: AppBlueprint = {
   key: "expenses",
+  managerNote: "They'll see and approve everyone's expense claims.",
   version: 4, // 2: approval steps; 3: managers hear about new claims; 4: the claimant hears about rejections
   name: "Expense claims",
   description: "Staff claim what they spent, with a receipt; managers approve and reimburse. Staff see only their own claims.",

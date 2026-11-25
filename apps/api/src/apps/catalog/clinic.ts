@@ -5,6 +5,7 @@ const ALL_RIGHTS = { view: true, create: true, edit: true, delete: true };
 
 export const clinic: AppBlueprint = {
   key: "clinic",
+  managerNote: "They'll see every patient's records and notes.",
   version: 1,
   name: "Clinic",
   description: "Patients, appointments, consultations with prescriptions, and bills. Doctors see their own consultations.",

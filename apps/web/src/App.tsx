@@ -23,7 +23,7 @@ const RecordFormPage = lazy(() => import("./pages/records/RecordFormPage"));
 const TablesSettingsPage = lazy(() => import("./pages/settings/TablesSettingsPage"));
 const TableSettingsPage = lazy(() => import("./pages/settings/TableSettingsPage"));
 const UsersPage = lazy(() => import("./pages/settings/UsersPage"));
-const RolesPage = lazy(() => import("./pages/settings/RolesPage"));
+const AccessLevelsPage = lazy(() => import("./pages/settings/AccessLevelsPage"));
 const DepartmentsPage = lazy(() => import("./pages/settings/DepartmentsPage"));
 const AuditLogPage = lazy(() => import("./pages/settings/AuditLogPage"));
 const AppsPage = lazy(() => import("./pages/settings/AppsPage"));
@@ -90,7 +90,7 @@ export default function App() {
                   <Route path="settings/ai" element={<AdminOnly><AiSettingsPage /></AdminOnly>} />
                   <Route path="settings/chat" element={<AdminOnly><ChatSettingsPage /></AdminOnly>} />
                   <Route path="chat" element={<ChatPage />} />
-                  <Route path="settings/roles" element={<AdminOnly><RolesPage /></AdminOnly>} />
+                  <Route path="settings/roles" element={<AdminOnly><AccessLevelsPage /></AdminOnly>} />
                   <Route path="settings/departments" element={<AdminOnly><DepartmentsPage /></AdminOnly>} />
                   <Route path="settings/audit" element={<AdminOnly><AuditLogPage /></AdminOnly>} />
 

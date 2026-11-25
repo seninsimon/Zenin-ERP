@@ -69,7 +69,7 @@ function WhoCanChoose({ label, value, onChange }: { label: string; value: string
   return (
     <Popover opened={opened} onChange={setOpened} position="bottom-end" width={280} shadow="md" withinPortal={false}>
       <Popover.Target>
-        <Tooltip label={limited ? "Only some roles can choose it" : "Who can choose this"}>
+        <Tooltip label={limited ? "Only some levels can choose it" : "Who can choose this"}>
           <ActionIcon
             variant={limited ? "light" : "subtle"}
             color={limited ? undefined : "gray"}
@@ -88,7 +88,8 @@ function WhoCanChoose({ label, value, onChange }: { label: string; value: string
             </WithHelp>
           }
           description="An approval step. Leave empty: anyone who can edit. Admins always can."
-          data={roles.filter((r) => !r.isAdmin).map((r) => ({ value: r._id, label: r.name }))}
+          // app levels ("HR & leave · Manager"); an older role stays listed while it's chosen
+          data={roles.filter((r) => !r.isAdmin && (r.appKey || value.includes(r._id))).map((r) => ({ value: r._id, label: r.name }))}
           value={value}
           onChange={onChange}
           placeholder={value.length ? undefined : "Anyone"}

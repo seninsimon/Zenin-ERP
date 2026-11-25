@@ -13,6 +13,8 @@ export type AccessOption = {
   name: string;
   icon: string;
   levels: { level: string; label: string; description: string }[];
+  // shown when someone is made Manager: "They'll see everyone's salary"
+  managerNote?: string;
 };
 
 const LEVELS: Record<string, { rank: number; description: string }> = {
@@ -21,28 +23,33 @@ const LEVELS: Record<string, { rank: number; description: string }> = {
 };
 const rank = (level: string) => LEVELS[level]?.rank ?? 1.5;
 const label = (level: string) => level.charAt(0).toUpperCase() + level.slice(1);
+// an added level's name, as in its role ("HR & leave · Accountant" -> "Accountant")
+const levelName = (level: string, roleName: string) =>
+  LEVELS[level] ? label(level) : roleName.includes(" · ") ? roleName.split(" · ").slice(1).join(" · ") : label(level);
 
 const launcherOf = (appKey: string) =>
   launcherApp(appKey) ?? { key: appKey, name: APP_BY_KEY.get(appKey)?.name ?? appKey, icon: "IconApps", description: "" };
 
 const appRoles = async () =>
-  (await query<{ _id: string; app_key: string; app_level: string }>(`SELECT _id, app_key, app_level FROM roles WHERE app_key IS NOT NULL`)).rows;
+  (await query<{ _id: string; app_key: string; app_level: string; name: string }>(`SELECT _id, app_key, app_level, name FROM roles WHERE app_key IS NOT NULL`)).rows;
 
 // The apps a person can be given access to, with the levels each offers.
 export async function accessOptions(): Promise<AccessOption[]> {
-  const byKey = new Map<string, AccessOption & { levelSet: Set<string> }>();
+  const byKey = new Map<string, AccessOption & { levelSet: Map<string, string> }>();
   for (const r of await appRoles()) {
     const l = launcherOf(r.app_key);
-    const entry = byKey.get(l.key) ?? { key: l.key, name: l.name, icon: l.icon, levels: [], levelSet: new Set<string>() };
-    entry.levelSet.add(r.app_level);
+    const note = APP_BY_KEY.get(r.app_key)?.managerNote;
+    const entry = byKey.get(l.key) ?? { key: l.key, name: l.name, icon: l.icon, levels: [], levelSet: new Map<string, string>() };
+    if (note && !entry.managerNote) entry.managerNote = note;
+    if (!entry.levelSet.has(r.app_level)) entry.levelSet.set(r.app_level, levelName(r.app_level, r.name));
     byKey.set(l.key, entry);
   }
   return [...byKey.values()]
     .map(({ levelSet, ...o }) => ({
       ...o,
       levels: [...levelSet]
-        .sort((a, b) => rank(a) - rank(b))
-        .map((level) => ({ level, label: label(level), description: LEVELS[level]?.description ?? "" })),
+        .sort(([a, an], [b, bn]) => rank(a) - rank(b) || an.localeCompare(bn))
+        .map(([level, name]) => ({ level, label: name, description: LEVELS[level]?.description ?? "" })),
     }))
     .sort((a, b) => (a.key === "company" ? -1 : b.key === "company" ? 1 : a.name.localeCompare(b.name)));
 }

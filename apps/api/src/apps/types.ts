@@ -53,6 +53,9 @@ export interface AppBlueprint {
   // Inventory adds stock on hand to "products.products"; removed with the app
   extend?: Record<string, ColumnBlueprint[]>;
   roles?: RoleBlueprint[];
+  // shown when someone is made Manager of this app, at that moment:
+  // "They'll see everyone's salary and payslips."
+  managerNote?: string;
   // "when Status becomes Approved -> notify the person who asked" (table key;
   // trigger and actions as in src/schema/automations.ts)
   automations?: { table: string; name: string; trigger: Record<string, unknown>; actions: Record<string, unknown>[] }[];

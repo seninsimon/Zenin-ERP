@@ -91,7 +91,7 @@ function NewTableModal({ opened, onClose }: { opened: boolean; onClose: () => vo
             allowDeselect={false}
             {...form.getInputProps("app")}
           />
-          <Input.Wrapper label={`What ${appName} Staff can do`} description={`${appName} Managers can do everything. You can change both later on the Roles page.`}>
+          <Input.Wrapper label={`What ${appName} Staff can do`} description={`${appName} Managers can do everything. You can change both later on the Access levels page.`}>
             <SegmentedControl mt={6} fullWidth data={STAFF_CHOICES} {...form.getInputProps("staff")} aria-label="What Staff can do" />
           </Input.Wrapper>
           <Group justify="flex-end" gap="xs">

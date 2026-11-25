@@ -3,6 +3,7 @@ import type { AppBlueprint } from "../types.js";
 
 export const payroll: AppBlueprint = {
   key: "payroll",
+  managerNote: "They'll see everyone's salary and payslips.",
   version: 3, // 2: approval steps; 3: the employee hears when a payslip is ready and paid
   name: "Payroll",
   description: "Monthly payslips with gross and net pay worked out. Staff see only their own payslips.",

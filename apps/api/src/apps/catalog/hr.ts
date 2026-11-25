@@ -3,6 +3,7 @@ import type { AppBlueprint } from "../types.js";
 
 export const hr: AppBlueprint = {
   key: "hr",
+  managerNote: "They'll see and approve everyone's leave and attendance.",
   version: 3, // 2: approval steps; 3: managers hear about new requests, the employee about decisions
   name: "HR & leave",
   description: "Leave requests with approval, attendance and the holiday calendar. Staff see only their own.",

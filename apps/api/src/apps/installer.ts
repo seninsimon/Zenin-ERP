@@ -275,6 +275,21 @@ function planRoles(
   return roles;
 }
 
+// What an app's Staff or Manager came with, on the app's own tables (for
+// "Reset to the app's defaults"). null when the app has no such level.
+export function defaultRolePerms(appKey: string, level: string, schemas: TableSchema[]): Record<string, Permissions> | null {
+  const app = APP_BY_KEY.get(appKey);
+  if (!app?.roles?.some((r) => r.name.toLowerCase() === level)) return null;
+  const tables = schemas
+    .filter((s) => s.appKey === appKey && s.blueprintKey)
+    .map((s) => ({ key: s.blueprintKey!, app: appKey, action: "create" as const, tableName: s.tableName }));
+  const role = planRoles([app], tables, new Map()).find((r) => r.level === level);
+  if (!role) return null;
+  return Object.fromEntries(
+    Object.entries(role.perms).map(([t, p]) => [t, { view: Boolean(p.view), create: Boolean(p.create), edit: Boolean(p.edit), delete: Boolean(p.delete), ...(p.own ? { own: true } : {}) }])
+  );
+}
+
 async function loadAppRoles(db?: pg.PoolClient) {
   const { rows } = await query<{ _id: string; app_key: string; app_level: string; permissions: Record<string, Permissions> }>(
     `SELECT _id, app_key, app_level, permissions FROM roles WHERE app_key IS NOT NULL`,

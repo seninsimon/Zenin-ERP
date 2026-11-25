@@ -42,6 +42,11 @@ const NO_LIMITS: AiLimits = { monthlyUsd: null, perPersonDaily: null };
 
 let cache: { at: number; value: AiSettings } | null = null;
 
+// after the settings were changed elsewhere (moving older roles to levels)
+export const forgetAiSettings = () => {
+  cache = null;
+};
+
 export async function getAiSettings(): Promise<AiSettings> {
   if (cache && Date.now() - cache.at < 15_000) return cache.value;
   const { rows } = await query<{ value: Partial<AiSettings> }>(`SELECT value FROM app_state WHERE key = 'ai'`);

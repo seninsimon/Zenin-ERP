@@ -7,6 +7,7 @@ import { departmentOptionsHandler, userOptionsHandler } from "./controllers/peop
 import * as jobs from "./controllers/jobs.js";
 import * as records from "./controllers/records.js";
 import * as apps from "./controllers/apps.js";
+import * as levels from "./controllers/levels.js";
 import * as email from "./controllers/email.js";
 import * as ai from "./controllers/ai.js";
 import * as branding from "./controllers/branding.js";
@@ -59,6 +60,13 @@ r.get("/roles", adminOnly, handle(admin.getRoles));
 r.post("/roles", adminOnly, handle(admin.createRoleHandler));
 r.put("/roles/:id", adminOnly, handle(admin.updateRoleHandler));
 r.delete("/roles/:id", adminOnly, handle(admin.deleteRoleHandler));
+// access levels per app (Staff, Manager, added ones); moving older roles to them
+r.get("/access-levels", adminOnly, handle(levels.listLevelsHandler));
+r.post("/access-levels/move", adminOnly, handle(levels.moveHandler));
+r.post("/access-levels/:app", adminOnly, handle(levels.addLevelHandler));
+r.put("/access-levels/:app/:level", adminOnly, handle(levels.saveLevelHandler));
+r.delete("/access-levels/:app/:level", adminOnly, handle(levels.deleteLevelHandler));
+r.post("/access-levels/:app/:level/reset", adminOnly, handle(levels.resetLevelHandler));
 
 r.get("/departments", adminOnly, handle(admin.getDepartments));
 r.post("/departments", adminOnly, handle(admin.createDepartmentHandler));

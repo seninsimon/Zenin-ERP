@@ -22,23 +22,6 @@
   outline-offset: 2px;
 }
 
-/* role permission matrix */
-.matrix th,
-.matrix td {
-  text-align: center;
-}
-
-.matrix th:first-child,
-.matrix td:first-child {
-  text-align: left;
-}
-
-.permCard {
-  border: 1px solid var(--app-border);
-  border-radius: var(--mantine-radius-md);
-  padding: var(--mantine-spacing-sm);
-}
-
 /* icon picker for apps you make (New app, Rename) */
 .iconChoice {
   display: flex;

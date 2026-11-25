@@ -831,6 +831,17 @@ appear. Phones don't get it (`?view=sheet` falls back to the list).
   people, links and departments by name). Each row is one normal save, with
   `_expected` for the cells it changes; rows past the end become new records.
   A notification sums it up; problem cells turn red.
+- **Selecting like Excel** (the grid itself selects one cell; the rest is
+  ours): drag across cells (the cell under the pointer is found with
+  `elementFromPoint`, since the grid holds on to the mouse), Shift+click, or
+  Shift+arrows select a block (highlighted); Ctrl+A selects the page.
+  **Ctrl+C** copies the block as tab-separated text; **Ctrl+V** onto a block
+  fills all of it with one copied value; **Delete** empties the block's
+  changeable cells (asks above 20), one save per row with `_expected`. The
+  grid's **fill handle** (a cell's corner square) copies a value down through
+  `onFill`, as normal cell saves. **Row tick boxes** (the grid's
+  `SelectColumn`) give **Change a field** (the Bulk update dialog) and
+  **Delete rows** (only with delete rights). No Ctrl+click of scattered cells.
 - **Live:** others' changes (`useLiveChanges`) refresh the sheet at once; the
   cell being edited keeps its editor (`closeOnExternalRowChange: false`).
   While the live stream is held back (`useLiveHeldBack`, e.g. the Quick

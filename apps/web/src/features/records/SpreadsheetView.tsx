@@ -4,10 +4,13 @@ import { IconAlertTriangle, IconArrowUpRight, IconPlus } from "@tabler/icons-rea
 import { notifications } from "@mantine/notifications";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { DataGrid, type Column, type DataGridHandle } from "react-data-grid";
+import { DataGrid, SelectColumn, type Column, type DataGridHandle } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 
 import { errorMessage, getTableData, insertData, updateData, type ListFilter } from "../../api/api";
+import { useBulkDelete } from "../../api/reactQueryHooks/useTables";
+import { confirmDanger } from "../../components/ui/confirm";
+import { BulkUpdateModal } from "./BulkUpdateModal";
 import { FieldValue } from "../../components/ui/FieldValue";
 import { recordPath, tableTitle } from "../../layout/nav";
 import { formatNumber, pluralize } from "../../lib/format";
@@ -40,6 +43,11 @@ type Row = {
 };
 type CellState = { state: "saving" | "saved" | "error"; message?: string };
 type Conflict = { id: string; column: RecordColumn; by: string; mine: unknown; title: string };
+// a block of cells, by grid position (rows from 0; columns as the grid counts them)
+type Range = { r1: number; c1: number; r2: number; c2: number };
+// the grid's first columns: row tick boxes, then "open the record"
+const DATA_START = 2;
+const MAX_CLEAR_WITHOUT_ASKING = 20;
 
 const key = (id: string, col: string) => `${id}:${col}`;
 const same = (a: unknown, b: unknown) => {
@@ -140,6 +148,35 @@ export function SpreadsheetView({
   // the key that opened a cell's editor ("7"), for that cell only
   const startWith = useRef<{ cell: string; char: string } | null>(null);
   const grid = useRef<DataGridHandle>(null);
+  // a selected block of cells (drag, Shift+click, Shift+arrows, Ctrl+A)
+  const [range, setRange] = useState<Range | null>(null);
+  const dragging = useRef<{ rowIdx: number; colIdx: number } | null>(null);
+  useEffect(() => {
+    const stop = () => (dragging.current = null);
+    // while dragging: the cell under the pointer (the grid may hold on to the
+    // mouse, so cells themselves aren't told), by its row and column numbers
+    const move = (e: MouseEvent) => {
+      const d = dragging.current;
+      if (!d) return;
+      const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest("[role=gridcell]");
+      const row = cell?.closest("[role=row]");
+      if (!cell || !row || !grid.current?.element?.contains(cell)) return;
+      const colIdx = Number(cell.getAttribute("aria-colindex")) - 1;
+      const rowIdx = Number(row.getAttribute("aria-rowindex")) - 2; // row 1 is the header
+      if (Number.isNaN(colIdx) || Number.isNaN(rowIdx) || rowIdx < 0 || colIdx < DATA_START) return;
+      setRange(d.rowIdx === rowIdx && d.colIdx === colIdx ? null : { r1: d.rowIdx, c1: d.colIdx, r2: rowIdx, c2: colIdx });
+    };
+    window.addEventListener("mouseup", stop);
+    window.addEventListener("mousemove", move);
+    return () => {
+      window.removeEventListener("mouseup", stop);
+      window.removeEventListener("mousemove", move);
+    };
+  }, []);
+  // ticked rows, for Delete rows / Change a field
+  const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(() => new Set());
+  const [bulkEdit, setBulkEdit] = useState(false);
+  const bulkDelete = useBulkDelete(table);
 
   const saved: Row[] = useMemo(
     () =>
@@ -161,6 +198,18 @@ export function SpreadsheetView({
   );
   const rows = useMemo(() => [...saved, ...drafts], [saved, drafts]);
   const total = (query.data?.total as number | undefined) ?? 0;
+  const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r._id, i])), [rows]);
+  const lastCol = DATA_START + columns.length - 1;
+  const block = range && {
+    top: Math.min(range.r1, range.r2),
+    bottom: Math.max(range.r1, range.r2),
+    left: Math.max(DATA_START, Math.min(range.c1, range.c2)),
+    right: Math.min(lastCol, Math.max(range.c1, range.c2)),
+  };
+  const many = Boolean(block && (block.top !== block.bottom || block.left !== block.right));
+  const inBlock = (rowIdx: number, colIdx: number) =>
+    Boolean(many && block && rowIdx >= block.top && rowIdx <= block.bottom && colIdx >= block.left && colIdx <= block.right);
+  const colAt = (colIdx: number) => columns[colIdx - DATA_START];
 
   const setCell = (id: string, col: string, state: CellState | null) =>
     setCells((all) => {
@@ -239,18 +288,23 @@ export function SpreadsheetView({
     }
   };
 
-  // paste a block from Excel or Google Sheets, from the active cell on
+  // paste a block from Excel or Google Sheets, from the active cell on; onto a
+  // selected block, one copied value fills all of it (as in Excel)
   const pasteBlock = async (text: string) => {
     if (!active) return;
-    const matrix = parseClipboard(text).slice(0, MAX_PASTE_ROWS);
+    let matrix = parseClipboard(text).slice(0, MAX_PASTE_ROWS);
     if (!matrix.length) return;
-    const gridColumns = columns.slice(Math.max(0, active.colIdx - 1));
+    const start = many && block ? { rowIdx: block.top, colIdx: block.left } : active;
+    if (many && block && matrix.length === 1 && matrix[0].length === 1) {
+      matrix = Array.from({ length: block.bottom - block.top + 1 }, () => Array.from({ length: block.right - block.left + 1 }, () => matrix[0][0]));
+    }
+    const gridColumns = columns.slice(Math.max(0, start.colIdx - DATA_START));
     const cache = newLookupCache();
     let saved = 0;
     let problems = 0;
     setPasting({ done: 0, total: matrix.length });
     for (const [r, cellsText] of matrix.entries()) {
-      const target = rows[active.rowIdx + r];
+      const target = rows[start.rowIdx + r];
       const values: Record<string, unknown> = {};
       const expected: Record<string, unknown> = {};
       const id = target && !target.draft ? target._id : `paste-${r}`;
@@ -291,7 +345,57 @@ export function SpreadsheetView({
     });
   };
 
+  // Delete: empties the selected cells (or the active one) that can be changed
+  const clearCells = () => {
+    const area = many && block ? block : active ? { top: active.rowIdx, bottom: active.rowIdx, left: active.colIdx, right: active.colIdx } : null;
+    if (!area) return;
+    const byRow = new Map<Row, RecordColumn[]>();
+    for (let r = area.top; r <= area.bottom; r++) {
+      const row = rows[r];
+      if (!row || row.draft) continue;
+      for (let c = area.left; c <= area.right; c++) {
+        const column = colAt(c);
+        if (column && editable(column, row) && !same(row.raw[column.name], null)) byRow.set(row, [...(byRow.get(row) ?? []), column]);
+      }
+    }
+    const count = [...byRow.values()].reduce((n, list) => n + list.length, 0);
+    if (!count) return;
+    const run = async () => {
+      for (const [row, list] of byRow) {
+        const values = Object.fromEntries(list.map((c) => [c.name, c.multiple ? [] : null]));
+        const expected = Object.fromEntries(list.map((c) => [c.name, row.raw[c.name] ?? null]));
+        try {
+          await updateData(table, row._id, { ...values, _expected: expected });
+          list.forEach((c) => flashSaved(row._id, c.name));
+        } catch (err) {
+          const errors = (err as { response?: { data?: { errors?: Record<string, string> } } }).response?.data?.errors ?? {};
+          for (const c of list) setCell(row._id, c.name, { state: "error", message: errors[c.name] ?? errorMessage(err) });
+        }
+      }
+      await refetch();
+    };
+    if (count > MAX_CLEAR_WITHOUT_ASKING) {
+      confirmDanger({
+        title: `Empty ${pluralize(count, "cell")}`,
+        message: "Their values are removed. Each record's history keeps what they were.",
+        confirmLabel: "Empty cells",
+        onConfirm: run,
+      });
+    } else void run();
+  };
+
+  // Shift+arrows: grow or shrink the block from where it started
+  const extendBy = (dRow: number, dCol: number) => {
+    if (!active) return;
+    const from = range ?? { r1: active.rowIdx, c1: active.colIdx, r2: active.rowIdx, c2: active.colIdx };
+    const r2 = Math.min(rows.length - 1, Math.max(0, from.r2 + dRow));
+    const c2 = Math.min(lastCol, Math.max(DATA_START, from.c2 + dCol));
+    setRange({ ...from, r2, c2 });
+    grid.current?.scrollToCell({ rowIdx: r2, idx: c2 });
+  };
+
   const gridColumns: Column<Row>[] = [
+    { ...SelectColumn, frozen: true },
     {
       key: "_open",
       name: "",
@@ -321,7 +425,8 @@ export function SpreadsheetView({
       editable: (row) => editable(c, row),
       cellClass: (row) => {
         const s = cells[key(row._id, c.name)]?.state;
-        return [s ? classes[s] : "", editable(c, row) ? "" : classes.readOnly].filter(Boolean).join(" ") || undefined;
+        const picked = inBlock(rowIndex.get(row._id) ?? -1, DATA_START + i);
+        return [s ? classes[s] : "", editable(c, row) ? "" : classes.readOnly, picked ? classes.picked : ""].filter(Boolean).join(" ") || undefined;
       },
       renderCell: ({ row }) => {
         const s = cells[key(row._id, c.name)];
@@ -373,8 +478,47 @@ export function SpreadsheetView({
           </Group>
         </Alert>
       )}
+      {selectedRows.size > 0 && (
+        <Group gap="xs" mb="xs" p="xs" className={classes.rowBar} wrap="wrap">
+          <Text size="sm" fw={500}>
+            {pluralize(selectedRows.size, "row")} selected
+          </Text>
+          {perms.edit && (
+            <Button size="xs" variant="default" onClick={() => setBulkEdit(true)}>
+              Change a field
+            </Button>
+          )}
+          {perms.delete && (
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              onClick={() =>
+                confirmDanger({
+                  title: `Delete ${pluralize(selectedRows.size, "record")}`,
+                  message: "They're removed for everyone. The audit log keeps what they were.",
+                  confirmLabel: "Delete records",
+                  onConfirm: async () => {
+                    await bulkDelete.mutateAsync([...selectedRows]);
+                    setSelectedRows(new Set());
+                    await refetch();
+                  },
+                })
+              }
+            >
+              Delete rows
+            </Button>
+          )}
+          <Button size="xs" variant="subtle" color="gray" onClick={() => setSelectedRows(new Set())}>
+            Clear
+          </Button>
+        </Group>
+      )}
       <Text size="xs" c="dimmed" mb={6}>
-        Click a cell and type; Enter saves, Esc cancels. Paste rows from Excel or Google Sheets.
+        {many && block
+          ? `${pluralize((block.bottom - block.top + 1) * (block.right - block.left + 1), "cell")} selected: Ctrl+C copies, Ctrl+V pastes into them, Delete empties them. `
+          : ""}
+        Click a cell and type; Enter saves, Esc cancels. Drag or Shift+click to select cells. Paste rows from Excel or Google Sheets.
         {heldBack ? " Others' changes show every few seconds." : " Others' changes show as they happen."}
         {schema.byDepartment !== false && (schema.allowedDepartments?.length ?? 0) > 1 && ` New rows go to ${schema.allowedDepartments![0].name}.`}
       </Text>
@@ -386,9 +530,51 @@ export function SpreadsheetView({
         rows={rows}
         getRowKey={(r: Row) => r._id}
         onRowsChange={onRowsChange}
+        selectedRows={selectedRows}
+        onSelectedRowsChange={setSelectedRows}
+        isRowSelectionDisabled={(r: Row) => Boolean(r.draft)}
+        onCellMouseDown={(args, event) => {
+          const colIdx = args.column.idx;
+          if (colIdx < DATA_START) return;
+          // Shift+click: the block from the active cell to here
+          if (event.shiftKey && active) {
+            setRange({ r1: active.rowIdx, c1: active.colIdx, r2: args.rowIdx, c2: colIdx });
+            event.preventGridDefault();
+            return;
+          }
+          dragging.current = { rowIdx: args.rowIdx, colIdx };
+          setRange(null);
+        }}
+        // the small square at a cell's corner: drag it to copy the value down
+        onFill={({ columnKey, sourceRow, targetRow }) => {
+          const column = columns.find((x) => x.name === columnKey);
+          if (!column || !editable(column, targetRow)) return targetRow;
+          return { ...targetRow, raw: { ...targetRow.raw, [columnKey]: sourceRow.raw[columnKey] } };
+        }}
         rowHeight={36}
         onActivePositionChange={({ rowIdx, column }) => setActive(column ? { rowIdx, colIdx: column.idx } : null)}
         onCellKeyDown={(args, event) => {
+          if (args.mode === "ACTIVE") {
+            const arrows: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+            if (event.shiftKey && arrows[event.key]) {
+              extendBy(...arrows[event.key]);
+              event.preventGridDefault();
+              event.preventDefault();
+              return;
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+              setRange({ r1: 0, c1: DATA_START, r2: rows.length - 1, c2: lastCol });
+              event.preventGridDefault();
+              event.preventDefault();
+              return;
+            }
+            if (event.key === "Delete") {
+              clearCells();
+              event.preventGridDefault();
+              return;
+            }
+            if (event.key === "Escape" || arrows[event.key]) setRange(null);
+          }
           // typing on a cell replaces its value, as in Excel
           if (args.mode === "ACTIVE" && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
             const c = columns.find((x) => x.name === args.column?.key);
@@ -396,7 +582,15 @@ export function SpreadsheetView({
           }
         }}
         onCellCopy={({ row, column }, event) => {
-          event.clipboardData.setData("text/plain", plain(row.show[column.key]));
+          // a block: rows on lines, cells between tabs (pastes into Excel / Sheets)
+          const text =
+            many && block
+              ? rows
+                  .slice(block.top, block.bottom + 1)
+                  .map((r) => Array.from({ length: block.right - block.left + 1 }, (_, k) => plain(r.show[colAt(block.left + k)?.name ?? ""])).join("\t"))
+                  .join("\n")
+              : plain(row.show[column.key]);
+          event.clipboardData.setData("text/plain", text);
           event.preventDefault();
         }}
         onCellPaste={({ row }, event) => {
@@ -406,6 +600,19 @@ export function SpreadsheetView({
           return row;
         }}
       />
+      {bulkEdit && (
+        <BulkUpdateModal
+          table={table}
+          columns={columns}
+          ids={[...selectedRows]}
+          opened
+          onClose={() => setBulkEdit(false)}
+          onDone={() => {
+            setSelectedRows(new Set());
+            void refetch();
+          }}
+        />
+      )}
       <Group justify="space-between" mt="sm" gap="xs" wrap="wrap">
         <Group gap="xs">
           {perms.create && (

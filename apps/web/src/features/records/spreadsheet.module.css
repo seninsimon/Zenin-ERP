@@ -10,6 +10,9 @@
   --rdg-header-background-color: var(--app-muted);
   --rdg-row-hover-background-color: var(--app-muted);
   --rdg-selection-color: var(--mantine-primary-color-filled);
+  /* ticked rows: Zenin's soft highlight, readable in dark mode too */
+  --rdg-row-selected-background-color: var(--mantine-primary-color-light);
+  --rdg-row-selected-hover-background-color: var(--mantine-primary-color-light-hover);
 }
 
 /* a cell being edited: the field input fills it */
@@ -42,4 +45,24 @@
 .cellText {
   display: block;
   inline-size: 100%;
+}
+
+/* selecting cells: no text selection while dragging across them */
+.sheet {
+  user-select: none;
+}
+.sheet input,
+.sheet textarea {
+  user-select: text;
+}
+/* a cell inside the selected block */
+.picked {
+  background-color: var(--mantine-primary-color-light) !important;
+}
+
+/* the bar when rows are ticked */
+.rowBar {
+  border: 1px solid var(--app-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--app-muted);
 }

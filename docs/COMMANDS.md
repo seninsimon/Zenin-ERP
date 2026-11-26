@@ -194,6 +194,18 @@ pnpm lint
 
 `task test` creates the test database the first time if it's missing.
 
+**Security of the packages** (before each release, and about once a month):
+
+```bash
+cd apps/api && pnpm audit --prod     # known security holes in what's shipped
+cd apps/web && pnpm audit --prod
+pnpm update                          # in each folder: newer versions in the same range, then run all the checks above
+```
+
+`eslint-plugin-react-hooks` stays at exactly 7.0.1 in the web app: 7.1.1
+is stricter about older code (lint errors, no security change). Update it on
+purpose, with time to fix what it finds.
+
 ---
 
 ## 8. Settings without commands

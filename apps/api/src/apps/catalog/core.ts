@@ -10,6 +10,7 @@ export const people: AppBlueprint = {
   description: "Everyone who works here, with their department and login. HR, leave and payroll build on it.",
   icon: "IconAddressBook",
   group: "Company",
+  part: true,
   tables: [
     {
       key: "employees",
@@ -50,9 +51,10 @@ export const customers: AppBlueprint = {
   key: "customers",
   version: 1,
   name: "Customers",
-  description: "The companies you work with and the people there. CRM, helpdesk and billing build on it.",
+  description: "The companies you work with and the people there. CRM and billing build on it.",
   icon: "IconBuildingStore",
   group: "Company",
+  part: true,
   tables: [
     {
       key: "companies",
@@ -110,6 +112,7 @@ export const products: AppBlueprint = {
   description: "What you sell or use, with prices. Billing and inventory build on it.",
   icon: "IconPackage",
   group: "Company",
+  part: true,
   tables: [
     {
       key: "products",

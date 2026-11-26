@@ -1,20 +1,18 @@
-import { BUNDLES } from "./bundles.js";
-import { assets } from "./catalog/assets.js";
 import { billing } from "./catalog/billing.js";
 import { clinic } from "./catalog/clinic.js";
 import { customers, people, products } from "./catalog/core.js";
 import { crm } from "./catalog/crm.js";
 import { expenses } from "./catalog/expenses.js";
-import { helpdesk } from "./catalog/helpdesk.js";
 import { hr } from "./catalog/hr.js";
 import { inventory } from "./catalog/inventory.js";
-import { ngo } from "./catalog/ngo.js";
 import { payroll } from "./catalog/payroll.js";
 import { projects } from "./catalog/projects.js";
 import { school } from "./catalog/school.js";
-import type { AppBlueprint, BundleBlueprint } from "./types.js";
+import type { AppBlueprint } from "./types.js";
 
-// Every app and organization type the installer knows.
+// Every app the installer knows. Kept to what most businesses need; apps for
+// one trade (Clinic, School) are the first ones customers asked for. More
+// come when customers ask (or they draft their own with AI).
 export const APPS: AppBlueprint[] = [
   people,
   customers,
@@ -23,18 +21,13 @@ export const APPS: AppBlueprint[] = [
   hr,
   payroll,
   crm,
-  helpdesk,
   billing,
   inventory,
   expenses,
-  assets,
   clinic,
   school,
-  ngo,
 ];
 export const APP_BY_KEY = new Map(APPS.map((a) => [a.key, a]));
-export const BUNDLE_BY_KEY = new Map<string, BundleBlueprint>(BUNDLES.map((b) => [b.key, b]));
-export { BUNDLES };
 
 // Apps that share a sidebar group show as one app in the launcher.
 const GROUPS: Record<string, { icon: string; description: string }> = {

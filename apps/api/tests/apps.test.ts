@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { APPS, BUNDLES, fullKey } from "../src/apps/index.js";
+import { APPS, fullKey } from "../src/apps/index.js";
 import { normalizeColumn } from "../src/schema/columns.js";
 import { checkFormulas } from "../src/schema/formula.js";
 import { checkRollups } from "../src/schema/rollups.js";
@@ -105,9 +105,6 @@ describe("App catalog", () => {
         expect(r.who === "$managers" || has(r.who.split(".")[0]), `${app.key}: ${r.label}: ${r.who}`).toBe(true);
       }
     }
-    for (const bundle of BUNDLES) for (const key of bundle.apps) expect(keys.has(key), `${bundle.key}: ${key}`).toBe(true);
-    // a bundle key that's also an app key would install the whole bundle
-    for (const bundle of BUNDLES) expect(keys.has(bundle.key), `bundle ${bundle.key} clashes with an app`).toBe(false);
   });
 });
 
@@ -120,10 +117,10 @@ describe("Installing apps", async () => {
     if ((await admin.get("/api/schema/deals")).body.blueprintKey === null) await admin.del("/api/schema/deals");
     const installed = (await admin.get("/api/apps")).body.apps.filter((a: { installed: unknown }) => a.installed);
     // apps that others need go last
-    for (const key of ["clinic", "school", "ngo", "billing", "inventory", "payroll", "expenses", "assets", "helpdesk", "crm", "hr", "projects", "customers", "products", "people"]) {
+    for (const key of ["clinic", "school", "billing", "inventory", "payroll", "expenses", "crm", "hr", "projects", "customers", "products", "people"]) {
       if (installed.some((a: { key: string }) => a.key === key)) await admin.del(`/api/apps/${key}`).expect(200);
     }
-    for (const name of ["deals", "deals_2", "activities", "projects", "tasks", "time_logs", "companies", "contacts", "employees", "leave_requests", "attendance", "holidays", "tickets", "products", "invoices", "invoice_lines", "payments", "quotes", "quote_lines", "suppliers", "purchase_orders", "po_lines", "stock_moves", "payslips", "expense_claims", "assets", "maintenance", "patients", "appointments", "consultations", "prescription_items", "bills", "bill_lines", "classes", "students", "subjects", "student_attendance", "exams", "marks", "fees", "programmes", "donors", "donations", "volunteers", "volunteer_hours"]) {
+    for (const name of ["deals", "deals_2", "activities", "projects", "tasks", "time_logs", "companies", "contacts", "employees", "leave_requests", "attendance", "holidays", "products", "invoices", "invoice_lines", "payments", "quotes", "quote_lines", "suppliers", "purchase_orders", "po_lines", "stock_moves", "payslips", "expense_claims", "patients", "appointments", "consultations", "prescription_items", "bills", "bill_lines", "classes", "students", "subjects", "student_attendance", "exams", "marks", "fees"]) {
       if ((await admin.get(`/api/schema/${name}`)).status === 200) await admin.del(`/api/schema/${name}`);
     }
   };
@@ -133,10 +130,14 @@ describe("Installing apps", async () => {
   const schema = async (name: string) => (await admin.get(`/api/schema/${name}`)).body;
   const records = async (name: string) => (await admin.get(`/api/table/${name}?limit=100`)).body.data as Record<string, unknown>[];
 
-  it("lists apps and organization types", async () => {
+  it("lists the apps; People, Customers and Products are parts others add", async () => {
     const { apps, bundles } = (await admin.get("/api/apps")).body;
-    expect(apps.map((a: { key: string }) => a.key)).toEqual(expect.arrayContaining(["projects", "hr", "crm", "helpdesk", "people"]));
-    expect(bundles.find((b: { key: string }) => b.key === "it").apps).toContain("projects");
+    const keys = apps.map((a: { key: string }) => a.key);
+    expect(keys).toEqual(expect.arrayContaining(["projects", "hr", "crm", "billing", "clinic", "school", "people"]));
+    expect(keys).not.toContain("helpdesk");
+    expect(bundles).toBeUndefined();
+    const parts = apps.filter((a: { part: boolean }) => a.part).map((a: { key: string }) => a.key);
+    expect(parts.sort()).toEqual(["customers", "people", "products"]);
   });
 
   it("previews an install, pulling in what an app needs", async () => {
@@ -345,38 +346,16 @@ describe("Installing apps", async () => {
     expect((await records("tasks")).map((t) => t.title)).toEqual(["A real task"]);
   });
 
-  it("an organization type brings departments, which the admin can rename or leave out", async () => {
+  it("adds every app with its samples", async () => {
     await reset();
-    const suggested = (await admin.post("/api/apps/plan", { apps: ["org-clinic"] }).expect(200)).body.departments;
-    expect(suggested.map((d: { name: string }) => d.name)).toEqual(["Front desk", "Doctors", "Nursing", "Pharmacy", "Accounts"]);
-
-    const reception = unique("Reception"); // "Front desk", renamed
-    await admin.post("/api/apps/install", { apps: ["org-clinic"], options: { departments: [reception, "Doctors"] } }).expect(200);
-    const names = (await admin.get("/api/departments")).body.map((d: { name: string }) => d.name);
-    expect(names).toEqual(expect.arrayContaining([reception, "Doctors"]));
-    expect(names).not.toContain("Nursing");
-    expect((await schema("patients")).departments.map((d: { name: string }) => d.name)).toEqual(expect.arrayContaining([reception, "Doctors"]));
-    // next time, the existing ones are reused
-    const again = (await admin.post("/api/apps/plan", { apps: ["org-clinic"] })).body.departments;
-    expect(again.find((d: { name: string }) => d.name === "Doctors").exists).toBe(true);
-    await reset();
-  });
-
-  it("sets up every kind of organization, with samples", async () => {
-    await reset();
-    for (const bundle of BUNDLES) {
-      const res = await admin.post("/api/apps/install", { apps: [bundle.key], options: { departmentIds: [dept._id], sampleData: true } });
-      expect(res.status, `${bundle.key}: ${res.body.message}`).toBe(200);
-      expect(res.body.sampleRecords, bundle.key).toBeGreaterThan(0);
-      if (bundle.key === "org-clinic") expect((await records("bills"))[0]).toMatchObject({ total: 850, balance: 550 });
-      if (bundle.key === "org-school") {
+    for (const app of APPS.filter((a) => !a.part && a.sample)) {
+      const res = await admin.post("/api/apps/install", { apps: [app.key], options: { departmentIds: [dept._id], sampleData: true } });
+      expect(res.status, `${app.key}: ${res.body.message}`).toBe(200);
+      expect(res.body.sampleRecords, app.key).toBeGreaterThan(0);
+      if (app.key === "clinic") expect((await records("bills"))[0]).toMatchObject({ total: 850, balance: 550 });
+      if (app.key === "school") {
         expect((await records("marks")).map((m) => m.percent).sort()).toEqual([68, 88]);
         expect((await records("fees")).map((f) => f.balance).sort()).toEqual([0, 9000]);
-      }
-      if (bundle.key === "org-ngo") {
-        const programmes = Object.fromEntries((await records("programmes")).map((p) => [p.name, p]));
-        expect(programmes["Evening tuition"]).toMatchObject({ raised: 125000 });
-        expect((await records("volunteers"))[0]).toMatchObject({ hours: 4.5 });
       }
       await reset();
     }

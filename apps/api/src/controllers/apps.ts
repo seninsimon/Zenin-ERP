@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { APP_BY_KEY, APPS, BUNDLES, fullKey, launcherApp } from "../apps/index.js";
+import { APP_BY_KEY, APPS, fullKey, launcherApp } from "../apps/index.js";
 import { activeAi, featureOn, PROVIDER_NAMES } from "../ai/settings.js";
 import { draftWithAi, fromDraft, loadDraftedApps, registerApp } from "../apps/draft.js";
 import type { AppBlueprint } from "../apps/types.js";
@@ -51,6 +51,8 @@ export async function listAppsHandler(_req: Request, res: Response) {
         description: app.description,
         icon: app.icon,
         group: app.group ?? app.name,
+        // People, Customers, Products: added by the apps that need them
+        part: Boolean(app.part),
         needs: app.needs ?? [],
         tables: app.tables.map((t) => ({ key: t.key, label: t.label, description: t.description })),
         // made here ("New app", My tables, drafted with AI): can be renamed
@@ -67,7 +69,6 @@ export async function listAppsHandler(_req: Request, res: Response) {
           : null,
       };
     }),
-    bundles: BUNDLES,
   });
 }
 

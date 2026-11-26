@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -8,25 +9,19 @@ import {
   Checkbox,
   Drawer,
   Group,
+  Menu,
   Modal,
   Radio,
   SimpleGrid,
   Skeleton,
   Stack,
-  TagsInput,
   Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import {
-  IconArrowRight,
-  IconCheck,
-  IconPencil,
-  IconPlus,
-  IconSparkles,
-} from "@tabler/icons-react";
+import { IconCheck, IconDots, IconEraser, IconPencil, IconPlus, IconSparkles, IconTrash } from "@tabler/icons-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useDepartments } from "../../api/reactQueryHooks/useAdmin";
@@ -45,7 +40,6 @@ import {
 import { Page, PageHeader, Section } from "../../components/ui/Page";
 import { tablePath, tableTitle } from "../../layout/nav";
 import { AppIcon } from "../../features/apps/AppIcon";
-import { formatDate } from "../../lib/format";
 import { errorMessage } from "../../api/api";
 import classes from "./settings.module.css";
 
@@ -60,22 +54,18 @@ function InstallDrawer({ target, onClose }: { target: Target | null; onClose: ()
   const [tables, setTables] = useState<Record<string, boolean>>({});
   const [conflicts, setConflicts] = useState<Record<string, "new" | "use">>({});
   const [sampleData, setSampleData] = useState(false);
-  // an organization type's starter departments, as edited (null = as suggested)
-  const [starter, setStarter] = useState<string[] | null>(null);
   const install = useInstallApps();
 
   const { data: plan, isLoading, error } = useInstallPlan(target?.apps ?? null, { tables, conflicts }, target?.draft);
   // the tables are shared with every department, so switching one to
   // "each department only its own" later just works
   const shareWith = departments.map((d) => d._id);
-  const starterNames = starter ?? plan?.departments.map((d) => d.name) ?? [];
-  const options: InstallOptions = { tables, conflicts, departmentIds: shareWith, sampleData, departments: starterNames };
+  const options: InstallOptions = { tables, conflicts, departmentIds: shareWith, sampleData };
 
   const reset = () => {
     setTables({});
     setConflicts({});
     setSampleData(false);
-    setStarter(null);
   };
   const close = () => {
     reset();
@@ -197,17 +187,6 @@ function InstallDrawer({ target, onClose }: { target: Target | null; onClose: ()
               </Card>
             ))}
           </Stack>
-
-          {plan.departments.length > 0 && (
-            <TagsInput
-              label="Departments"
-              description="Created for you (ones you already have are reused). Rename or remove any; you can change them later too."
-              value={starterNames}
-              onChange={setStarter}
-              placeholder={starterNames.length ? undefined : "Type a name and press Enter"}
-              clearable
-            />
-          )}
 
           {plan.roles.length > 0 && (
             <Stack gap={4}>
@@ -398,234 +377,239 @@ function AppNameModal({
   );
 }
 
-/* ---------------- page ---------------- */
+/* ---------------- draft with AI ---------------- */
 
-export default function AppsPage() {
-  const { data, isLoading } = useApps();
-  const [target, setTarget] = useState<Target | null>(null);
+function DraftAiModal({
+  opened,
+  onClose,
+  aiDrafts,
+  aiName,
+  onDrafted,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  aiDrafts: boolean;
+  aiName: string | null;
+  onDrafted: (target: Target) => void;
+}) {
   const [description, setDescription] = useState("");
   const draftApp = useDraftApp();
   // failures are shown by the hook (a notification)
   const draft = () =>
     draftApp.mutateAsync(description.trim()).then(
-      (result) => setTarget({ title: result.app.name, apps: [], draft: result.draft }),
+      (result) => {
+        onDrafted({ title: result.app.name, apps: [], draft: result.draft });
+        setDescription("");
+      },
       () => {}
     );
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={
+        <Group gap="xs">
+          Draft an app with AI
+          <Badge variant="light" color="violet">
+            Beta
+          </Badge>
+        </Group>
+      }
+    >
+      {aiDrafts ? (
+        <Stack>
+          <Text size="sm" c="dimmed">
+            Say what you do in a sentence or two. AI{aiName ? ` (${aiName})` : ""} drafts the tables; you see them before anything is added,
+            and can change everything afterwards. AI can make mistakes: check before relying on it.
+          </Text>
+          <Textarea
+            aria-label="What you do"
+            placeholder="e.g. We're a 12-person dental clinic with two branches. We book appointments, keep treatment notes and bill patients."
+            autosize
+            minRows={3}
+            maxRows={6}
+            maxLength={2000}
+            data-autofocus
+            value={description}
+            onChange={(e) => setDescription(e.currentTarget.value)}
+          />
+          <Group justify="space-between" gap="xs">
+            <Text size="xs" c="dimmed">
+              {draftApp.isPending ? "Drafting… this can take up to a minute." : ""}
+            </Text>
+            <Button leftSection={<IconSparkles size={16} />} onClick={draft} loading={draftApp.isPending} disabled={description.trim().length < 10}>
+              Draft tables
+            </Button>
+          </Group>
+        </Stack>
+      ) : (
+        <Stack align="flex-start">
+          <Text size="sm">To use this, choose an AI (Claude, Gemini or ChatGPT) in Administration → AI, paste its key and switch on Draft apps.</Text>
+          <Button variant="light" component={Link} to="/settings/ai" leftSection={<IconSparkles size={16} />}>
+            Set up AI
+          </Button>
+        </Stack>
+      )}
+    </Modal>
+  );
+}
+
+/* ---------------- page ---------------- */
+
+// most needed first; apps for one kind of organization last
+const ORDER = ["hr", "expenses", "projects", "crm", "billing", "inventory", "payroll", "clinic", "school"];
+// what most businesses start with (offered while nothing is added)
+const STARTER = ["hr", "expenses", "projects"];
+const rank = (key: string) => (ORDER.includes(key) ? ORDER.indexOf(key) : ORDER.length);
+
+// One app as a short row: icon, name, one line, and its action on the right.
+function AppRow({ app, detail, action }: { app: AppInfo; detail: string; action: React.ReactNode }) {
+  return (
+    <Group justify="space-between" wrap="nowrap" gap="sm" px="lg" py="sm" className={classes.appRow}>
+      <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+        <AppIcon name={app.icon} size={32} />
+        <div style={{ minWidth: 0 }}>
+          <Text fw={500} size="sm">
+            {app.name}
+          </Text>
+          <Text size="xs" c="dimmed" lineClamp={2}>
+            {detail}
+          </Text>
+        </div>
+      </Group>
+      {action}
+    </Group>
+  );
+}
+
+export default function AppsPage() {
+  const { data, isLoading } = useApps();
+  const [target, setTarget] = useState<Target | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const [removing, setRemoving] = useState<AppInfo | null>(null);
+  const [naming, setNaming] = useState<{ app: AppInfo | null } | null>(null);
   const removeSample = useRemoveSample();
 
-  const [naming, setNaming] = useState<{ app: AppInfo | null } | null>(null);
   const apps = useMemo(() => data?.apps ?? [], [data]);
-  // your own apps (My tables, New app, drafted with AI) get their own section
-  const yours = apps.filter((a) => a.installed && a.own).sort((a, b) => (a.key === "my-tables" ? -1 : b.key === "my-tables" ? 1 : a.name.localeCompare(b.name)));
-  const installed = apps.filter((a) => a.installed && !a.own);
-  const available = apps.filter((a) => !a.installed);
-  const bundles = data?.bundles ?? [];
+  // everything added, in one list: ready-made apps first, then your own, My tables last
+  const added = apps
+    // My tables only once it has tables (an empty one is just noise)
+    .filter((a) => a.installed && !a.part && (a.key !== "my-tables" || (a.installed.inApp ?? []).length > 0))
+    .sort((a, b) => Number(Boolean(a.own)) - Number(Boolean(b.own)) || (a.key === "my-tables" ? 1 : b.key === "my-tables" ? -1 : rank(a.key) - rank(b.key) || a.name.localeCompare(b.name)));
+  // People, Customers and Products come with the apps that need them
+  const available = apps.filter((a) => !a.installed && !a.part && !a.own).sort((a, b) => rank(a.key) - rank(b.key));
+  const nothingYet = !apps.some((a) => a.installed && !a.own && !a.part);
+  const starter = STARTER.filter((k) => available.some((a) => a.key === k));
 
-  const bundleSection = (
-    <Section
-      title="Start from your organization"
-      description="A set of apps that fit together. You'll see everything before anything is added."
-    >
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-        {bundles.map((b) => {
-          const done = b.apps.every((k) => apps.find((a) => a.key === k)?.installed);
-          return (
-            <Card key={b.key} withBorder radius="md" padding="md">
-              <Stack gap="sm" h="100%">
-                <AppIcon name={b.icon} />
-                <div>
-                  <Text fw={600}>{b.name}</Text>
-                  <Text size="sm" c="dimmed">
-                    {b.description}
-                  </Text>
-                </div>
-                <Group mt="auto">
-                  {done ? (
-                    <Badge color="teal" variant="light" leftSection={<IconCheck size={12} />}>
-                      Added
-                    </Badge>
-                  ) : (
-                    <Button size="xs" variant="light" rightSection={<IconArrowRight size={14} />} onClick={() => setTarget({ title: b.name, apps: [b.key] })}>
-                      Set up
-                    </Button>
-                  )}
-                </Group>
-              </Stack>
-            </Card>
-          );
-        })}
-      </SimpleGrid>
-    </Section>
+  const addButton = (app: AppInfo) => (
+    <Button size="xs" variant="light" style={{ flexShrink: 0 }} onClick={() => setTarget({ title: app.name, apps: [app.key] })}>
+      Add
+    </Button>
   );
 
   return (
-    <Page title="Manage apps" breadcrumbs={[{ label: "Administration" }, { label: "Manage apps" }]} width="wide">
+    <Page title="Manage apps" breadcrumbs={[{ label: "Administration" }, { label: "Manage apps" }]}>
       <PageHeader
         title="Manage apps"
         help="apps"
         description="Ready-made, connected tables for the work you do. Everything an app adds is yours to change afterwards."
         actions={
-          <Button leftSection={<IconPlus size={16} />} onClick={() => setNaming({ app: null })}>
-            New app
-          </Button>
+          <Group gap="xs">
+            <Button variant="default" leftSection={<IconSparkles size={16} />} onClick={() => setDrafting(true)}>
+              Draft with AI
+            </Button>
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setNaming({ app: null })}>
+              New app
+            </Button>
+          </Group>
         }
       />
       {isLoading ? (
         <Skeleton h={240} radius="lg" />
       ) : (
         <Stack gap="lg">
-          {!installed.length && bundleSection}
-
-          <Section
-            title={
-              <Group gap="xs">
-                Describe your organization
-                <Badge variant="light" color="violet">
-                  AI · Beta
-                </Badge>
-              </Group>
-            }
-            description={`Not in the list? Say what you do in a sentence or two, and AI${data?.aiName ? ` (${data.aiName})` : ""} drafts the tables. You'll see them before anything is added, and can change everything afterwards. AI can make mistakes: check before relying on it.`}
-          >
-            {data?.aiDrafts ? (
-              <Stack gap="sm">
-                <Textarea
-                  aria-label="Your organization"
-                  placeholder="e.g. We're a 12-person dental clinic with two branches. We book appointments, keep treatment notes and bill patients."
-                  autosize
-                  minRows={2}
-                  maxRows={5}
-                  maxLength={2000}
-                  value={description}
-                  onChange={(e) => setDescription(e.currentTarget.value)}
-                />
-                <Group>
-                  <Button
-                    leftSection={<IconSparkles size={16} />}
-                    onClick={draft}
-                    loading={draftApp.isPending}
-                    disabled={description.trim().length < 10}
-                  >
-                    Draft tables
-                  </Button>
-                  {draftApp.isPending && (
-                    <Text size="sm" c="dimmed">
-                      Drafting… this can take up to a minute.
-                    </Text>
-                  )}
-                </Group>
-              </Stack>
-            ) : (
-              <Group gap="sm">
-                <Text size="sm" c="dimmed">
-                  To turn this on, choose an AI (Claude, Gemini or ChatGPT), paste its key, and switch on Draft apps.
+          {nothingYet && starter.length === STARTER.length && (
+            <Section padding="md">
+              <Group justify="space-between" gap="sm">
+                <Text size="sm">
+                  <b>New here?</b> Most businesses start with HR & leave, Expense claims and Projects.
                 </Text>
-                <Button size="xs" variant="light" component={Link} to="/settings/ai" leftSection={<IconSparkles size={14} />}>
-                  Set up AI
+                <Button size="xs" onClick={() => setTarget({ title: "HR & leave, Expense claims and Projects", apps: STARTER })}>
+                  Add these 3
                 </Button>
               </Group>
-            )}
-          </Section>
+            </Section>
+          )}
+
+          {added.length > 0 && (
+            <Section title="Your apps" description="Their tables are in the sidebar, grouped by app." padding={0}>
+              {added.map((app) => {
+                const tables = app.installed!.inApp ?? app.installed!.tables;
+                const samples = app.installed!.sampleRecords;
+                const canRemove = app.key !== "my-tables";
+                return (
+                  <AppRow
+                    key={app.key}
+                    app={app}
+                    detail={tables.length ? tables.map(tableTitle).join(", ") : app.own ? "No tables yet: add them from Tables & columns" : "Uses tables you already had"}
+                    action={
+                      <Menu position="bottom-end" withinPortal>
+                        <Menu.Target>
+                          <ActionIcon variant="subtle" color="gray" aria-label={`${app.name}: more`}>
+                            <IconDots size={18} />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          {app.own && (
+                            <Menu.Item leftSection={<IconPencil size={16} />} onClick={() => setNaming({ app })}>
+                              Rename
+                            </Menu.Item>
+                          )}
+                          {samples > 0 && (
+                            <Menu.Item leftSection={<IconEraser size={16} />} onClick={() => removeSample.mutate(app.key)}>
+                              Remove {samples} sample records
+                            </Menu.Item>
+                          )}
+                          {canRemove && (
+                            <>
+                              {(app.own || samples > 0) && <Menu.Divider />}
+                              <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => setRemoving(app)}>
+                                Remove app
+                              </Menu.Item>
+                            </>
+                          )}
+                        </Menu.Dropdown>
+                      </Menu>
+                    }
+                  />
+                );
+              })}
+            </Section>
+          )}
 
           {available.length > 0 && (
-            <Section title="Apps">
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-                {available.map((app) => (
-                  <Card key={app.key} withBorder radius="md" padding="md">
-                    <Stack gap="sm" h="100%">
-                      <Group gap="sm" wrap="nowrap">
-                        <AppIcon name={app.icon} />
-                        <Text fw={600}>{app.name}</Text>
-                      </Group>
-                      <Text size="sm" c="dimmed">
-                        {app.description}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {app.tables.map((t) => t.label).join(" · ")}
-                      </Text>
-                      <Group mt="auto">
-                        <Button size="xs" variant="light" onClick={() => setTarget({ title: app.name, apps: [app.key] })}>
-                          Add
-                        </Button>
-                      </Group>
-                    </Stack>
-                  </Card>
-                ))}
-              </SimpleGrid>
+            <Section title="Add an app" description="You'll see what it adds before anything changes." padding={0}>
+              {available.map((app) => (
+                <AppRow key={app.key} app={app} detail={app.description} action={addButton(app)} />
+              ))}
             </Section>
           )}
-
-          {installed.length > 0 && (
-            <Section title="Added" description="Apps you've added. Their tables are in the sidebar, grouped by app." padding="md">
-              <Stack gap="sm">
-                {installed.map((app) => (
-                  <Group key={app.key} justify="space-between" wrap="wrap" gap="sm">
-                    <Group gap="sm" wrap="nowrap">
-                      <AppIcon name={app.icon} size={32} />
-                      <div>
-                        <Text fw={500}>{app.name}</Text>
-                        <Text size="xs" c="dimmed">
-                          Added {formatDate(app.installed!.installedAt)} · {app.installed!.tables.map(tableTitle).join(", ") || "uses existing tables"}
-                        </Text>
-                      </div>
-                    </Group>
-                    <Group gap="xs">
-                      {app.installed!.sampleRecords > 0 && (
-                        <Button size="xs" variant="default" loading={removeSample.isPending && removeSample.variables === app.key} onClick={() => removeSample.mutate(app.key)}>
-                          Remove {app.installed!.sampleRecords} sample records
-                        </Button>
-                      )}
-                      <Button size="xs" variant="subtle" color="red" onClick={() => setRemoving(app)}>
-                        Remove app
-                      </Button>
-                    </Group>
-                  </Group>
-                ))}
-              </Stack>
-            </Section>
-          )}
-
-          {yours.length > 0 && (
-            <Section title="Your apps" help="ownApps" description="Apps you made, and My tables. Rename them any time." padding="md">
-              <Stack gap="sm">
-                {yours.map((app) => {
-                  const tables = app.installed!.inApp ?? app.installed!.tables;
-                  return (
-                    <Group key={app.key} justify="space-between" wrap="wrap" gap="sm">
-                      <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                        <AppIcon name={app.icon} size={32} />
-                        <div style={{ minWidth: 0 }}>
-                          <Text fw={500}>{app.name}</Text>
-                          <Text size="xs" c="dimmed">
-                            {tables.length ? tables.map(tableTitle).join(", ") : "No tables yet: add them from Tables & columns"}
-                          </Text>
-                        </div>
-                      </Group>
-                      <Group gap="xs">
-                        <Button size="xs" variant="default" leftSection={<IconPencil size={14} />} onClick={() => setNaming({ app })}>
-                          Rename
-                        </Button>
-                        {app.key !== "my-tables" && (
-                          <Button size="xs" variant="subtle" color="red" onClick={() => setRemoving(app)}>
-                            Remove app
-                          </Button>
-                        )}
-                      </Group>
-                    </Group>
-                  );
-                })}
-              </Stack>
-            </Section>
-          )}
-
-          {installed.length > 0 && bundles.some((b) => !b.apps.every((k) => apps.find((a) => a.key === k)?.installed)) && bundleSection}
         </Stack>
       )}
 
       <InstallDrawer target={target} onClose={() => setTarget(null)} />
       <RemoveAppModal app={removing} onClose={() => setRemoving(null)} />
       <AppNameModal opened={naming !== null} app={naming?.app ?? null} icons={data?.icons ?? []} onClose={() => setNaming(null)} />
+      <DraftAiModal
+        opened={drafting}
+        onClose={() => setDrafting(false)}
+        aiDrafts={Boolean(data?.aiDrafts)}
+        aiName={data?.aiName ?? null}
+        onDrafted={(t) => {
+          setDrafting(false);
+          setTarget(t);
+        }}
+      />
     </Page>
   );
 }

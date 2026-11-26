@@ -85,3 +85,8 @@
     max-width: 120px;
   }
 }
+
+/* Manage apps: an app as a short row, with a line between rows */
+.appRow + .appRow {
+  border-top: 1px solid var(--app-border);
+}

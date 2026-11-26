@@ -12,7 +12,7 @@ import { normalizeAutomation } from "../schema/automations.js";
 import { deleteTable, findRelationsTo, getAllSchemas, getSchema, invalidateSchemas } from "../schema/schemaRepo.js";
 import { coerceValues } from "../schema/validateRecord.js";
 import type { Column, CurrentUser, Permissions, RecordData, TableSchema } from "../types.js";
-import { APP_BY_KEY, BUNDLE_BY_KEY, fullKey } from "./index.js";
+import { APP_BY_KEY, fullKey } from "./index.js";
 import type { AppBlueprint, ColumnBlueprint, TableBlueprint } from "./types.js";
 
 // Turns app blueprints into ordinary tables.
@@ -31,10 +31,6 @@ export interface InstallOptions {
   tables?: Record<string, boolean>;
   // share the new tables with these departments
   departmentIds?: string[];
-  // departments to create (or reuse, by name) and share with: an
-  // organization type's starter departments, as the admin edited them.
-  // Not given: the organization type's own list
-  departments?: string[];
   sampleData?: boolean;
   // a table name that's already taken by one of your own tables:
   // "new" (default) = create "tasks_2"; "use" = use your table for it
@@ -67,8 +63,6 @@ export interface InstallPlan {
   extensions: { table: string; label: string; columns: string[] }[];
   // the apps' roles: "Projects · Manager" (level "manager"), "Projects · Staff"
   roles: { name: string; level: string; action: "create" | "extend"; tables: string[] }[];
-  // an organization type's starter departments (exists: one has that name already)
-  departments: { name: string; exists: boolean }[];
   hasSample: boolean;
 }
 
@@ -98,9 +92,8 @@ function resolveApps(keys: string[]): { app: AppBlueprint; pulledIn: boolean }[]
   return order;
 }
 
-// "it" (a bundle) -> its apps; app keys pass through
-export const expandKeys = (keys: string[]) =>
-  [...new Set(keys.flatMap((k) => BUNDLE_BY_KEY.get(k)?.apps ?? [k]))];
+// the apps asked for, each once
+export const expandKeys = (keys: string[]) => [...new Set(keys)];
 
 async function installedApps(db?: pg.PoolClient) {
   const { rows } = await query<{ key: string }>(`SELECT key FROM installed_apps`, [], db);
@@ -476,38 +469,9 @@ async function buildPlan(keys: string[], options: InstallOptions, db?: pg.PoolCl
         })
         .filter((e): e is { table: string; label: string; columns: string[] } => e !== null)
     ),
-    departments: await suggestedDepartments(keys, db),
     hasSample: ctx.appsToInstall.some((a) => a.sample),
   };
   return { plan, ctx, roles };
-}
-
-// The starter departments of the organization types being installed.
-async function suggestedDepartments(keys: string[], db?: pg.PoolClient) {
-  const names = [...new Set(keys.flatMap((k) => BUNDLE_BY_KEY.get(k)?.departments ?? []))];
-  if (!names.length) return [];
-  const { rows } = await query<{ name: string }>(`SELECT name FROM departments`, [], db);
-  const taken = new Set(rows.map((r) => r.name.trim().toLowerCase()));
-  return names.map((name) => ({ name, exists: taken.has(name.toLowerCase()) }));
-}
-
-// Create the named departments (or find them by name); returns their ids.
-async function ensureDepartments(names: string[], client: pg.PoolClient) {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of names.slice(0, 30)) {
-    const name = String(raw ?? "").trim().slice(0, 100);
-    if (!name || seen.has(name.toLowerCase())) continue;
-    seen.add(name.toLowerCase());
-    const found = await query<{ _id: string }>(`SELECT _id FROM departments WHERE lower(name) = lower($1) LIMIT 1`, [name], client);
-    if (found.rows[0]) {
-      ids.push(found.rows[0]._id);
-      continue;
-    }
-    const made = await query<{ _id: string }>(`INSERT INTO departments (name) VALUES ($1) RETURNING _id`, [name], client);
-    ids.push(made.rows[0]._id);
-  }
-  return ids;
 }
 
 export async function plan(keys: string[], options: InstallOptions = {}): Promise<InstallPlan> {
@@ -520,7 +484,7 @@ const isoDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export async function install(keys: string[], options: InstallOptions, user: CurrentUser) {
-  let departmentIds = [...new Set(options.departmentIds ?? [])];
+  const departmentIds = [...new Set(options.departmentIds ?? [])];
   const created: TableSchema[] = [];
   const touched: string[] = [];
 
@@ -534,10 +498,6 @@ export async function install(keys: string[], options: InstallOptions, user: Cur
       const { rows } = await query<{ _id: string }>(`SELECT _id FROM departments WHERE _id = ANY($1::text[])`, [departmentIds], client);
       if (rows.length !== departmentIds.length) throw new HttpError(400, "A chosen department doesn't exist");
     }
-    // an organization type's starter departments (as edited in the preview)
-    const starter = Array.isArray(options.departments) ? options.departments : p.departments.map((d) => d.name);
-    const starterIds = await ensureDepartments(starter, client);
-    departmentIds = [...new Set([...departmentIds, ...starterIds])];
 
     const byKey = new Map(p.tables.map((t) => [t.key, t]));
     const schemaFor = new Map<string, TableSchema>(); // table name -> schema being written

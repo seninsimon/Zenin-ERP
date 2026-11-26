@@ -63,8 +63,9 @@ The whole model in three sentences:
 | **Who sees the records** | Per table: everyone with access, or split by department | Tables → the table → Access |
 | **Visible to** | Which departments see one record (only on "each department" tables) | The record form |
 
-**With apps** (the usual way): pick an organization type in **Manage apps**.
-It creates the apps, their levels and starter departments. Then **Add person**
+**With apps** (the usual way): add apps in **Manage apps** (a new system
+offers "Add these 3": HR & leave, Expense claims and Projects). Each app
+brings its tables and levels. Then **Add person**
 (Users) for each person: name, login, department, and app access. With the
 People directory installed, the same form adds their directory entry, linked
 to the login, with their department filled in.
@@ -919,10 +920,22 @@ appear. Phones don't get it (`?view=sheet` falls back to the list).
 
 ## 5. Apps (Administration → Manage apps)
 
-An **app** (Projects, HR & leave, CRM, Helpdesk, …) is a blueprint of tables,
-columns, links and roles in `src/apps/`. Installing it creates **ordinary
-tables** that can then be changed like any other. An **organization type**
-("IT / software company") is a set of apps installed together.
+An **app** (Projects, HR & leave, CRM, …) is a blueprint of tables, columns,
+links and roles in `src/apps/`. Installing it creates **ordinary tables**
+that can then be changed like any other.
+
+**The Manage apps page** (`AppsPage.tsx`), top to bottom:
+- **New here?** (only while no ready-made app is added): "Add these 3"
+  installs HR & leave, Expense claims and Projects in one preview.
+- **Your apps:** one list of everything added (ready-made, your own, and My
+  tables once it has a table). A ⋯ menu per row: Rename (your own apps),
+  Remove N sample records, Remove app.
+- **Add an app:** one short row per app, most needed first; Clinic and
+  School last. People, Customers and
+  Products (`part: true` in their blueprint) aren't offered on their own:
+  the apps that need them add them.
+- **Draft with AI** and **New app** are buttons in the header; Draft with
+  AI opens a small dialog (or says how to set up AI).
 
 **Every table is in an app** (`src/apps/ownApps.ts`), and every app has a
 **Manager** and a **Staff** role, so access is always given the same way: App
@@ -976,8 +989,7 @@ access on the person.
   them through **App access** on their page; Company (People, Customers,
   Products) is one row there. Removing an app removes its roles.
 - **Records** of app tables are seen by everyone whose role can use them
-  (`by_department = false`); an organization type also creates its starter
-  departments (renamable in the preview; existing names are reused).
+  (`by_department = false`).
 - **Sample data** goes only into tables made by that install, and can be
   removed later in one click (`sample_ids`). Named samples (`sample_refs`)
   let a later app's samples link to an earlier app's.
@@ -985,10 +997,13 @@ access on the person.
   (`extend`, e.g. Inventory adds *In stock* and *Low stock* to Products).
   They're recorded in `installed_apps.options.extended` and removed with the
   app.
-- **Catalog:** 15 apps (People directory, Customers, Products, Projects,
-  HR & leave, Payroll, CRM, Helpdesk, Billing, Inventory & purchasing,
-  Expense claims, Assets, Clinic, School, Donors & programmes) and 8
-  organization types (`bundles.ts`; their keys never equal an app's).
+- **Catalog** (kept small on purpose: what most businesses need; more only
+  when customers ask): 7 general apps (HR & leave, Expense claims, Projects,
+  CRM, Billing, Inventory & purchasing, Payroll: simple payslips, no
+  PF/ESI/TDS), 2 trade apps (Clinic, School), and the 3 shared parts
+  (People directory, Customers, Products). Helpdesk, Assets, Donors &
+  programmes and the "organization types" were removed on 2026-11-26 (in
+  git history if a customer needs them).
 - **Launcher and sidebar.** Every table in `GET /api/schema` carries
   `app: { key, name, icon, description }` (`launcherApp()` in
   `src/apps/index.ts`): its app, or the group its app is in (People,
@@ -1253,8 +1268,9 @@ review checklist for pull requests.
 ### Add an app
 
 Apps live in `src/apps/catalog/` (one file per app). Register a new one in
-`APPS` in `src/apps/index.ts`, and add it to a bundle in `src/apps/bundles.ts`
-if it belongs to an organization type.
+`APPS` in `src/apps/index.ts`. On the web, add its key to `ORDER` in
+`AppsPage.tsx` (the order of the "Add an app" list). Add one only when a customer
+needs it.
 
 1. Describe its tables with the helpers in `src/apps/dsl.ts` (`text`,
    `choice`, `link`, `user`, `formula`, `autonum`, …). A `link`'s target is a

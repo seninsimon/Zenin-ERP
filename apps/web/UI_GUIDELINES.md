@@ -278,6 +278,10 @@ tables.
     **Add N people**; nothing is saved before that. On phones the check sits
     under each row (no sideways scrolling);
   - the rows that failed come back as a file with a "Problem" column.
+- **Short lists of things you manage** (Manage apps): one row each in a
+  Section with `padding={0}`: icon, name, one dimmed line, and on the right
+  one button (Add) or a ⋯ menu (Rename, Remove…). No grid of big cards; no
+  small print nobody acts on.
 - **Shown once** (temporary passwords): a yellow box, **Download** button, and
   closing without downloading asks first.
 - **Alignment:**

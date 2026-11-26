@@ -46,6 +46,9 @@ export interface AppBlueprint {
   icon: string; // a Tabler icon name, e.g. "IconChecklist"
   // sidebar group for its tables (default: the app's name)
   group?: string;
+  // a shared part (People, Customers, Products): added automatically by the
+  // apps that need it, not offered on its own in Manage apps
+  part?: boolean;
   // apps whose tables this one links to; installed first when missing
   needs?: string[];
   tables: TableBlueprint[];
@@ -84,13 +87,3 @@ export interface DashboardBlueprint {
   breakdown?: { label: string; table: string; column: string };
 }
 
-// An organization type: a set of apps installed together.
-export interface BundleBlueprint {
-  key: string;
-  name: string;
-  description: string;
-  icon: string;
-  apps: string[];
-  // starter departments, created with it (the admin can rename or drop them)
-  departments?: string[];
-}

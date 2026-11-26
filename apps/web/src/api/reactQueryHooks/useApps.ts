@@ -10,6 +10,8 @@ export type AppInfo = {
   description: string;
   icon: string;
   group: string;
+  // People, Customers, Products: added by the apps that need them, not on their own
+  part?: boolean;
   needs: string[];
   tables: { key: string; label: string; description: string }[];
   // made here: New app, My tables, or drafted with AI (can be renamed)
@@ -25,15 +27,11 @@ export type AppInfo = {
   } | null;
 };
 
-export type BundleInfo = { key: string; name: string; description: string; icon: string; apps: string[] };
-
 export type InstallOptions = {
   tables?: Record<string, boolean>;
   departmentIds?: string[];
   sampleData?: boolean;
   conflicts?: Record<string, "new" | "use">;
-  // an organization type's starter departments, as edited (created or reused by name)
-  departments?: string[];
 };
 
 export type PlannedTable = {
@@ -53,7 +51,6 @@ export type InstallPlan = {
   apps: { key: string; name: string; status: "install" | "installed"; pulledIn: boolean }[];
   tables: PlannedTable[];
   roles: { name: string; level: string; action: "create" | "extend"; tables: string[] }[];
-  departments: { name: string; exists: boolean }[];
   hasSample: boolean;
 };
 
@@ -69,7 +66,7 @@ export const useApps = () =>
   useQuery({
     queryKey: ["apps"],
     queryFn: async () =>
-      (await api.get<{ apps: AppInfo[]; bundles: BundleInfo[]; aiDrafts: boolean; aiName: string | null; icons: string[] }>("/apps")).data,
+      (await api.get<{ apps: AppInfo[]; aiDrafts: boolean; aiName: string | null; icons: string[] }>("/apps")).data,
   });
 
 // What installing would do; refreshed whenever the choices change.

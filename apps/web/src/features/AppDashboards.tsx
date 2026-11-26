@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import api, { getTableData, type ListFilter } from "../api/api";
 import { tablePath } from "../layout/nav";
 import { formatCompact, formatNumber } from "../lib/format";
+import { ReportCard, type HomeReport } from "./ReportCard";
 
 type Board = {
   app: string;
@@ -12,6 +13,8 @@ type Board = {
   name: string;
   tiles: { label: string; table: string; filters: ListFilter[] }[];
   breakdown: { label: string; table: string; column: string; options: string[] } | null;
+  // saved reports of this app (reports part 3)
+  reports: HomeReport[];
 };
 
 // how many records match, from the normal list (so it follows the viewer's access)
@@ -136,18 +139,52 @@ export function AppDashboards({ launcher }: { launcher?: string } = {}) {
             </Title>
           )}
           {/* tiles, and the breakdown beside them on wide screens */}
-          <SimpleGrid cols={{ base: 1, md: b.breakdown && b.tiles.length ? 2 : 1 }} spacing="md">
-            {b.tiles.length > 0 && (
-              <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md" style={{ alignContent: "start" }}>
-                {b.tiles.map((t) => (
-                  <Tile key={t.label} {...t} />
-                ))}
-              </SimpleGrid>
-            )}
-            {b.breakdown && <Breakdown {...b.breakdown} />}
-          </SimpleGrid>
+          {(b.tiles.length > 0 || b.breakdown) && (
+            <SimpleGrid cols={{ base: 1, md: b.breakdown && b.tiles.length ? 2 : 1 }} spacing="md">
+              {b.tiles.length > 0 && (
+                <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md" style={{ alignContent: "start" }}>
+                  {b.tiles.map((t) => (
+                    <Tile key={t.label} {...t} />
+                  ))}
+                </SimpleGrid>
+              )}
+              {b.breakdown && <Breakdown {...b.breakdown} />}
+            </SimpleGrid>
+          )}
+          {/* its saved reports */}
+          {(b.reports ?? []).length > 0 && (
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" mt={b.tiles.length || b.breakdown ? "md" : 0}>
+              {b.reports.map((r) => (
+                <ReportCard key={r.id} report={r} />
+              ))}
+            </SimpleGrid>
+          )}
         </Box>
       ))}
     </Stack>
+  );
+}
+
+// Home with many apps (the app launcher): the pinned reports of every app in
+// one section; each app's page shows its own counts and reports.
+export function HomeReports() {
+  const { data: boards = [] } = useQuery({
+    queryKey: ["dashboards"],
+    queryFn: async () => (await api.get<Board[]>("/apps/dashboards")).data,
+    staleTime: 60_000,
+  });
+  const reports = boards.flatMap((b) => b.reports ?? []);
+  if (!reports.length) return null;
+  return (
+    <Box>
+      <Title order={4} mb="sm">
+        Reports
+      </Title>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        {reports.map((r) => (
+          <ReportCard key={r.id} report={r} />
+        ))}
+      </SimpleGrid>
+    </Box>
   );
 }

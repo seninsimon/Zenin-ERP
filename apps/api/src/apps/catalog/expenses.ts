@@ -58,6 +58,7 @@ export const expenses: AppBlueprint = {
       actions: [{ do: "notify", who: "claimant", message: "Your expense claim was paid back" }],
     },
   ],
+  reports: [{ name: "Claimed by person", table: "claims", groupBy: "claimant", show: "sum:amount", chart: "bar" }],
   dashboard: {
     tiles: [{ label: "Claims waiting for approval", table: "claims", filters: [{ field: "status", op: "in", value: ["Submitted"] }] }],
     breakdown: { label: "Claims by category", table: "claims", column: "category" },

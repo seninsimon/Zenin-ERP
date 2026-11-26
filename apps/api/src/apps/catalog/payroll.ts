@@ -52,6 +52,7 @@ export const payroll: AppBlueprint = {
     },
   ],
   // through "Employee" (whose Login account is them): their own payslips
+  reports: [{ name: "Net pay by month", table: "payslips", groupBy: "month", show: "sum:net", chart: "line" }],
   roles: [managerRole(), staffRole({ payslips: OWN(VIEW) })],
   sample: (ctx) => ({
     payslips: [

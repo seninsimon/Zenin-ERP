@@ -60,6 +60,7 @@ export const crm: AppBlueprint = {
       date: "expected_close",
     },
   ],
+  reports: [{ name: "Pipeline value by stage", table: "deals", groupBy: "stage", show: "sum:value", chart: "bar" }],
   dashboard: {
     tiles: [{ label: "Open deals", table: "deals", filters: [{ field: "stage", op: "notIn", value: ["Won", "Lost"] }] }],
     breakdown: { label: "Deals by stage", table: "deals", column: "stage" },

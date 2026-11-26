@@ -7,6 +7,7 @@ import { departmentOptionsHandler, userOptionsHandler } from "./controllers/peop
 import * as jobs from "./controllers/jobs.js";
 import * as records from "./controllers/records.js";
 import * as summary from "./controllers/summary.js";
+import * as reports from "./controllers/reports.js";
 import * as apps from "./controllers/apps.js";
 import * as levels from "./controllers/levels.js";
 import * as peopleImport from "./controllers/peopleImport.js";
@@ -138,6 +139,10 @@ r.post("/ai/access/apply", adminOnly, handle(ai.accessApplyHandler));
 // apps (Projects, HR, ...): catalog, preview, install, remove
 r.get("/apps", adminOnly, handle(apps.listAppsHandler));
 r.get("/apps/dashboards", requireAuth, handle(apps.dashboardsHandler));
+// saved reports on Home (admins pin, rename, remove; everyone sees them in their apps)
+r.post("/reports", adminOnly, handle(reports.createReportHandler));
+r.put("/reports/:id", adminOnly, handle(reports.renameReportHandler));
+r.delete("/reports/:id", adminOnly, handle(reports.deleteReportHandler));
 r.post("/apps/plan", adminOnly, handle(apps.planHandler));
 r.post("/apps/draft", adminOnly, handle(apps.draftHandler));
 r.post("/apps/install", adminOnly, handle(apps.installHandler));

@@ -114,6 +114,7 @@ export const clinic: AppBlueprint = {
       date: "date",
     },
   ],
+  reports: [{ name: "Billed by month", table: "bills", groupBy: "date", show: "sum:total", chart: "line" }],
   dashboard: {
     tiles: [
       { label: "Appointments today", table: "appointments", filters: [{ field: "date", op: "eq", value: "$today" }] },

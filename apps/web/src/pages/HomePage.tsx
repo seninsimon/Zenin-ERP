@@ -33,7 +33,7 @@ import { useTables } from "../api/reactQueryHooks/useTables";
 import { useCurrentUser } from "../auth/AuthContext";
 import { JobStatusBadge, jobResultSummary } from "../components/JobStatusBadge";
 import { EmptyState } from "../components/ui/EmptyState";
-import { AppDashboards } from "../features/AppDashboards";
+import { AppDashboards, HomeReports } from "../features/AppDashboards";
 import { TableCard, type TableInfo } from "../features/TableCard";
 import { AppCard } from "../features/apps/AppCard";
 import { useAppMenu } from "../features/apps/appMenu";
@@ -262,7 +262,9 @@ export default function HomePage() {
               ))}
             </SimpleGrid>
           </Box>
-        ) : (
+        ) : null}
+        {appMode && <HomeReports />}
+        {appMode ? null : (
           <>
         {/* the installed apps' counts: open tasks, overdue invoices, … */}
         <AppDashboards />

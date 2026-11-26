@@ -891,8 +891,27 @@ A table's records grouped by one column, on the list's **Summary** view
   the chart, then one row per group and an "All" total row. Clicking a group opens
   the Table view filtered to it (`groupFilter()` in `summary.ts`; Back
   returns to the summary). Numbers follow live changes.
-- Plan: `workspace/REPORTS_PLAN.md` (part 2 charts, part 3 saved reports on
-  Home).
+- **Reports on Home** (part 3): a saved summary (`reports` table, migration
+  020: name, table, group by, show, chart, filters; gone with its table).
+  - **Admins pin** one from a Summary (**Pin to Home**, `POST /reports`), and
+    rename or take it off Home from its card (`PUT` / `DELETE /reports/:id`).
+    The search box isn't kept; filters are.
+  - **Apps bring one each** (`reports` in the blueprint, added at install,
+    removed with the app): Invoiced by month, Claimed by person, Pipeline
+    value by stage, Billed by month, Leave days by month, Open tasks by
+    person, Fees due by term, Net pay by month, Purchases by month. None
+    repeats the app's own breakdown.
+  - **Who sees it:** everyone who can see the table, counting only their own
+    records (the card asks `GET /table/:t/summary` as them). A report on a
+    field hidden from someone isn't shown to them. If its column was
+    removed, admins see the problem on the card; others don't see it.
+  - **Where:** `GET /apps/dashboards` puts each report in its app's block
+    (`reports` per block; a block is made for an app without counts). Home
+    shows the blocks; with many apps (the launcher) Home has one
+    **Reports** section, and each app's page shows its own.
+  - **Card** (`ReportCard.tsx`): name, total, a compact chart (at most 10
+    bars); the name opens the full Summary, a bar opens its records.
+- Plan: `workspace/REPORTS_PLAN.md`.
 
 ### The Spreadsheet view
 

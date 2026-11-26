@@ -3,7 +3,7 @@ import { Box, Text } from "@mantine/core";
 
 import { formatNumber } from "../../lib/format";
 import type { RecordColumn } from "./schema";
-import { groupColor, type Summary, type SummaryChartKind, type SummaryGroup } from "./summary";
+import { groupColor, measureLabel, type Summary, type SummaryChartKind, type SummaryGroup } from "./summary";
 
 // The Summary view's chart (reports part 2), from the same numbers as its
 // table. One series in the app's colour (bars, or a line for months); a
@@ -11,23 +11,29 @@ import { groupColor, type Summary, type SummaryChartKind, type SummaryGroup } fr
 // table below as its legend. Loaded only when the Summary view is opened.
 
 const MAX_BARS = 30;
+const MAX_BARS_COMPACT = 10; // a report card on Home
 
 export default function SummaryChart({
   summary,
   groupBy,
   kind,
   onOpenGroup,
+  compact = false,
 }: {
   summary: Summary;
   groupBy: RecordColumn;
   kind: SummaryChartKind;
   onOpenGroup: (group: SummaryGroup) => void;
+  // a report card on Home: smaller, at most 10 bars
+  compact?: boolean;
 }) {
-  const name = summary.fn === "count" ? "Records" : `${summary.fn === "sum" ? "Total" : "Average"} ${summary.field?.label ?? ""}`;
+  const maxBars = compact ? MAX_BARS_COMPACT : MAX_BARS;
+  const height = compact ? 180 : 240;
+  const name = measureLabel(summary.fn, summary.field?.label ?? "");
   // groups without a number (an average of nothing) aren't drawn
-  const groups = summary.groups.filter((g) => g.value !== null).slice(0, MAX_BARS);
+  const groups = summary.groups.filter((g) => g.value !== null).slice(0, maxBars);
   const data = groups.map((g) => ({ group: g.label, value: g.value ?? 0 }));
-  const cut = summary.groups.length > MAX_BARS;
+  const cut = summary.groups.length > maxBars;
   const open = (index: number) => {
     const g = groups[index];
     if (g) onOpenGroup(g);
@@ -39,8 +45,8 @@ export default function SummaryChart({
       <Box py="xs" style={{ display: "flex", justifyContent: "center" }}>
         <DonutChart
           data={groups.map((g) => ({ name: g.label, value: g.value ?? 0, color: groupColor(groupBy, g) }))}
-          size={200}
-          thickness={28}
+          size={compact ? 160 : 200}
+          thickness={compact ? 22 : 28}
           paddingAngle={2}
           withTooltip
           tooltipDataSource="segment"
@@ -69,7 +75,7 @@ export default function SummaryChart({
       {kind === "line" ? (
         <LineChart
           {...common}
-          h={240}
+          h={height}
           curveType="monotone"
           strokeWidth={2}
           dotProps={{ r: 4 }}
@@ -82,7 +88,7 @@ export default function SummaryChart({
         // months: columns left to right, oldest first
         <BarChart
           {...common}
-          h={240}
+          h={height}
           barProps={{ radius: [4, 4, 0, 0], onClick: (_: unknown, index: number) => open(index), cursor: "pointer" }}
           maxBarWidth={48}
           aria-label={`${name} by ${summary.groupBy.label}: bar chart`}
@@ -91,7 +97,7 @@ export default function SummaryChart({
         // names: bars across, so long names stay readable
         <BarChart
           {...common}
-          h={Math.min(640, Math.max(140, data.length * 34 + 40))}
+          h={Math.min(compact ? 360 : 640, Math.max(140, data.length * (compact ? 28 : 34) + 40))}
           orientation="vertical"
           yAxisProps={{ width: 120 }}
           barProps={{ radius: [0, 4, 4, 0], onClick: (_: unknown, index: number) => open(index), cursor: "pointer" }}
@@ -101,7 +107,7 @@ export default function SummaryChart({
       )}
       {cut && (
         <Text size="xs" c="dimmed" mt={4}>
-          The chart shows the first {MAX_BARS}; the table below has them all.
+          {compact ? `The first ${maxBars}; open the report for all.` : `The chart shows the first ${maxBars}; the table below has them all.`}
         </Text>
       )}
     </Box>

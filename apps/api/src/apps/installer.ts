@@ -693,6 +693,18 @@ export async function install(keys: string[], options: InstallOptions, user: Cur
         client
       );
     }
+    // 5. its ready-made reports on Home, for the tables it made
+    for (const app of ctx.appsToInstall) {
+      for (const r of app.reports ?? []) {
+        const table = p.tables.find((t) => t.key === fullKey(app, r.table) && t.action === "create")?.tableName;
+        if (!table) continue;
+        await query(
+          `INSERT INTO reports (name, table_name, group_by, show, chart, filters, app_key, created_by) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
+          [r.name, table, r.groupBy, r.show ?? "count", r.chart ?? null, JSON.stringify(r.filters ?? []), app.key, user._id],
+          client
+        );
+      }
+    }
     return { plan: p, apps: ctx.appsToInstall.map((a) => a.key), sampleIds };
   });
 
@@ -834,6 +846,7 @@ export async function uninstall(key: string) {
     removedFiles.push(...(await deleteTable(schema, fileColumns)));
   }
   await query(`DELETE FROM installed_apps WHERE key = $1`, [key]);
+  await query(`DELETE FROM reports WHERE app_key = $1`, [key]); // its ready-made reports
   await query(`UPDATE table_schemas SET blueprint_key = NULL, app_key = NULL WHERE app_key = $1`, [key]);
   // its roles go too; anyone whose main role it was becomes a Member
   await query(

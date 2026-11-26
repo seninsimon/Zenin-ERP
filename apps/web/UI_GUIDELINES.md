@@ -282,6 +282,9 @@ tables.
   per group, numbers right-aligned with `tabular-nums`, an "All" row at the
   bottom. A row (and a bar or slice) opens its records. On phones the same
   (two or three columns fit).
+- **Report cards** (Home): name and total at the top (the name opens the
+  full report), a compact chart, admin actions in a ⋯ menu. A card that
+  can't be worked out says why in plain words.
 - **Charts** (`@mantine/charts`): one series in the primary colour; a line
   only over time; a donut only for shares of a choice, in the choice's own
   colours, with colour keys in the table beside it. Never two value axes.

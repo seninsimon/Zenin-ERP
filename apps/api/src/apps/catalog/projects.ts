@@ -70,6 +70,7 @@ export const projects: AppBlueprint = {
       date: "due",
     },
   ],
+  reports: [{ name: "Open tasks by person", table: "tasks", groupBy: "assignee", show: "count", chart: "bar", filters: [{ field: "status", op: "notIn", value: ["Done"] }] }],
   dashboard: {
     tiles: [
       { label: "Open tasks", table: "tasks", filters: [{ field: "status", op: "notIn", value: ["Done"] }] },

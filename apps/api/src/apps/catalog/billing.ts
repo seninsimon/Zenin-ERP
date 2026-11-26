@@ -88,6 +88,7 @@ export const billing: AppBlueprint = {
       date: "due",
     },
   ],
+  reports: [{ name: "Invoiced by month", table: "invoices", groupBy: "date", show: "sum:total", chart: "line" }],
   dashboard: {
     tiles: [
       { label: "Invoices not fully paid", table: "invoices", filters: [{ field: "balance", op: "gt", value: 0 }, { field: "status", op: "notIn", value: ["Draft", "Cancelled"] }] },

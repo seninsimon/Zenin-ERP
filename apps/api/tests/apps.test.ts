@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { APPS, fullKey } from "../src/apps/index.js";
+import { GROUP_TYPES, NUMBER_TYPES } from "../src/controllers/summary.js";
 import { normalizeColumn } from "../src/schema/columns.js";
 import { checkFormulas } from "../src/schema/formula.js";
 import { checkRollups } from "../src/schema/rollups.js";
@@ -83,6 +84,19 @@ describe("App catalog", () => {
       if (d.breakdown) {
         const column = columnsByKey.get(fullKey(app, d.breakdown.table))?.find((c) => c.name === d.breakdown!.column);
         expect(column?.type, `${app.key}: ${d.breakdown.label}`).toBe("choice");
+      }
+    }
+    // ready-made reports group and add up real columns of the right kinds
+    for (const app of APPS) {
+      for (const r of app.reports ?? []) {
+        const columns = columnsByKey.get(fullKey(app, r.table));
+        expect(columns, `${app.key}: ${r.name}`).toBeTruthy();
+        expect(GROUP_TYPES.includes(columns!.find((c) => c.name === r.groupBy)?.type ?? ""), `${app.key}: ${r.name} / ${r.groupBy}`).toBe(true);
+        if (r.show && r.show !== "count") {
+          const [fn, field] = r.show.split(":");
+          expect(["sum", "avg"].includes(fn) && NUMBER_TYPES.includes(columns!.find((c) => c.name === field)?.type ?? ""), `${app.key}: ${r.name} / ${r.show}`).toBe(true);
+        }
+        for (const f of r.filters ?? []) expect(columns!.some((c) => c.name === f.field), `${app.key}: ${r.name} / ${f.field}`).toBe(true);
       }
     }
     // automations name real columns of the app's tables

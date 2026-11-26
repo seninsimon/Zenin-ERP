@@ -67,6 +67,9 @@ export interface AppBlueprint {
   dashboard?: DashboardBlueprint;
   // in the morning summary email: "Your tasks due by tomorrow or overdue"
   reminders?: ReminderBlueprint[];
+  // ready-made reports on Home ("Invoiced by month"): a table key, a column
+  // to group by, "count" | "sum:<number column>" | "avg:…", a chart
+  reports?: { name: string; table: string; groupBy: string; show?: string; chart?: "bar" | "line" | "donut"; filters?: TileFilter[] }[];
 }
 
 // One list in the morning summary. filters: as dashboard tiles ("$today+1" is

@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { reportsFor, type ReportOut } from "./reports.js";
 import { APP_BY_KEY, APPS, fullKey, launcherApp } from "../apps/index.js";
 import { activeAi, featureOn, PROVIDER_NAMES } from "../ai/settings.js";
 import { draftWithAi, fromDraft, loadDraftedApps, registerApp } from "../apps/draft.js";
@@ -120,8 +121,19 @@ export async function removeSampleHandler(req: Request, res: Response) {
 // GET /apps/dashboards (everyone): the Home page counts of the installed apps,
 // only for tables this person can see. The numbers themselves come from the
 // normal list endpoint, so they follow departments and "Own only".
+type Board = {
+  app: string;
+  launcher: string;
+  name: string;
+  icon: string;
+  tiles: { label: string; table: string; filters: unknown[] }[];
+  breakdown: { label: string; table: string; column: string; options: string[] } | null;
+  reports: ReportOut[];
+};
+
 export async function dashboardsHandler(req: Request, res: Response) {
   const user = currentUser(req);
+  await loadDraftedApps(); // apps you made: their names, for their reports
   const schemas = await getAllSchemas();
   const byKey = new Map(schemas.filter((s) => s.blueprintKey).map((s) => [s.blueprintKey!, s]));
   const visible = (app: AppBlueprint, key: string) => {
@@ -129,7 +141,7 @@ export async function dashboardsHandler(req: Request, res: Response) {
     return schema && can(user, schema, "view") ? schema : null;
   };
   const hasColumns = (schema: TableSchema, names: string[]) => names.every((n) => schema.columns.some((c) => c.name === n));
-  const out = [];
+  const out: Board[] = [];
   for (const row of await listInstalled()) {
     const app = APP_BY_KEY.get(row.key);
     if (!app?.dashboard) continue;
@@ -148,7 +160,16 @@ export async function dashboardsHandler(req: Request, res: Response) {
         ? { label: b.label, table: bSchema.tableName, column: bColumn.name, options: (bColumn.options ?? []).map((o) => o.label) }
         : null;
     // launcher: the app page it shows on (an app, or its group, e.g. "company")
-    if (tiles.length || breakdown) out.push({ app: app.key, launcher: launcherApp(app.key)?.key ?? app.key, name: app.name, icon: app.icon, tiles, breakdown });
+    if (tiles.length || breakdown) out.push({ app: app.key, launcher: launcherApp(app.key)?.key ?? app.key, name: app.name, icon: app.icon, tiles, breakdown, reports: [] });
+  }
+  // saved reports join their app's block (one is made for an app without counts)
+  for (const { launcher, ...report } of await reportsFor(user)) {
+    let board = out.find((b) => b.launcher === launcher.key);
+    if (!board) {
+      board = { app: launcher.key, launcher: launcher.key, name: launcher.name, icon: launcher.icon, tiles: [], breakdown: null, reports: [] };
+      out.push(board);
+    }
+    board.reports.push(report);
   }
   res.json(out);
 }

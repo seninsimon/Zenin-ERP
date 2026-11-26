@@ -80,6 +80,7 @@ export const hr: AppBlueprint = {
       date: "from",
     },
   ],
+  reports: [{ name: "Leave days by month", table: "leave_requests", groupBy: "from", show: "sum:days", chart: "line" }],
   dashboard: {
     tiles: [{ label: "Leave waiting for approval", table: "leave_requests", filters: [{ field: "status", op: "in", value: ["Pending"] }] }],
     breakdown: { label: "Leave by type", table: "leave_requests", column: "type" },

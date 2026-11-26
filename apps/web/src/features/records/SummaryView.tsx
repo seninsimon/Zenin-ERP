@@ -1,11 +1,14 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Alert, Box, ColorSwatch, Group, Loader, SegmentedControl, Skeleton, Table, Text, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconChartBar, IconChartDonut, IconChartLine } from "@tabler/icons-react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { Alert, Box, Button, ColorSwatch, Group, Loader, Modal, SegmentedControl, Skeleton, Stack, Table, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { IconChartBar, IconChartDonut, IconChartLine, IconPin } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { useCurrentUser } from "../../auth/AuthContext";
 
 import api, { errorMessage, type ListFilter } from "../../api/api";
 import type { Filter } from "../../components/data-table";
-import { chartKinds, groupColor, groupFilter, type Summary, type SummaryChartKind } from "./summary";
+import { chartKinds, fetchSummary, groupColor, groupFilter, measureLabel, summaryKey, type SummaryChartKind } from "./summary";
 
 // the chart library loads only when a summary is shown
 const SummaryChart = lazy(() => import("./SummaryChart"));
@@ -45,15 +48,9 @@ export function SummaryView({
   onChartChange: (kind: SummaryChartKind) => void;
   onOpenGroup: (filter: Filter) => void;
 }) {
-  const [fn, field] = show.includes(":") ? show.split(":") : ["count", ""];
   const query = useQuery({
-    queryKey: ["summary", table, groupBy.name, fn, field, search, filters],
-    queryFn: async () =>
-      (
-        await api.get<Summary>(`/table/${encodeURIComponent(table)}/summary`, {
-          params: { groupBy: groupBy.name, fn, field: field || undefined, search: search || undefined, filters: filters.length ? JSON.stringify(filters) : undefined },
-        })
-      ).data,
+    queryKey: summaryKey(table, groupBy.name, show, search, filters),
+    queryFn: () => fetchSummary(table, groupBy.name, show, search, filters),
     placeholderData: keepPreviousData,
   });
   // others' changes: the numbers follow
@@ -70,8 +67,9 @@ export function SummaryView({
   const s = query.data;
   const kinds = chartKinds(groupBy, show);
   const kind: SummaryChartKind = kinds.find((k) => k === chart) ?? kinds[0];
+  const title = `${measureLabel(s.fn, s.field?.label ?? "")} by ${s.groupBy.label.toLowerCase()}${groupBy.type === "date" ? " (month)" : ""}`;
   const counting = s.fn === "count";
-  const valueTitle = counting ? null : `${s.fn === "sum" ? "Total" : "Average"} ${s.field?.label ?? ""}`;
+  const valueTitle = counting ? null : measureLabel(s.fn, s.field?.label ?? "");
   const shown = (v: number | null) => (v === null ? "—" : formatNumber(v));
 
   if (!s.total.count) {
@@ -86,9 +84,10 @@ export function SummaryView({
     <Box>
       <Group justify="space-between" mb="xs" gap="xs">
         <Text size="sm" fw={600}>
-          {s.fn === "count" ? "Records" : `${s.fn === "sum" ? "Total" : "Average"} ${s.field?.label ?? ""}`} by {s.groupBy.label.toLowerCase()}
-          {groupBy.type === "date" ? " (month)" : ""}
+          {title}
         </Text>
+        <Group gap="xs">
+        <PinToHome table={table} groupBy={groupBy.name} show={show} chart={kind} filters={filters} search={search} suggested={title} />
         {kinds.length > 1 && (
           <SegmentedControl
             size="xs"
@@ -109,6 +108,7 @@ export function SummaryView({
             })}
           />
         )}
+        </Group>
       </Group>
       <Box mb="md">
         <Suspense fallback={<Skeleton h={220} />}>
@@ -195,5 +195,86 @@ export function SummaryView({
         </Text>
       </Group>
     </Box>
+  );
+}
+
+// Admins: save this summary (with its chart and filters) as a report on Home,
+// in its app's block. Everyone who can see the table sees it, with their own numbers.
+function PinToHome({
+  table,
+  groupBy,
+  show,
+  chart,
+  filters,
+  search,
+  suggested,
+}: {
+  table: string;
+  groupBy: string;
+  show: string;
+  chart: SummaryChartKind;
+  filters: ListFilter[];
+  search: string;
+  suggested: string;
+}) {
+  const { isAdmin } = useCurrentUser();
+  const qc = useQueryClient();
+  const [opened, setOpened] = useState(false);
+  const [name, setName] = useState(suggested);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!isAdmin) return null;
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post("/reports", { name: name.trim(), table, groupBy, show, chart, filters });
+      await qc.invalidateQueries({ queryKey: ["dashboards"] });
+      notifications.show({ message: "Pinned to Home", color: "green" });
+      setOpened(false);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <Button
+        size="xs"
+        variant="default"
+        leftSection={<IconPin size={14} />}
+        onClick={() => {
+          setName(suggested);
+          setOpened(true);
+        }}
+      >
+        Pin to Home
+      </Button>
+      <Modal opened={opened} onClose={() => setOpened(false)} title="Pin to Home">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <Stack>
+            <Text size="sm" c="dimmed">
+              It shows in this app on Home, with this chart{filters.length ? " and these filters" : ""}. Everyone who can see the table sees it, counting
+              only the records they may see.{search ? " The search box isn't kept." : ""}
+            </Text>
+            <TextInput label="Name" withAsterisk maxLength={80} data-autofocus value={name} onChange={(e) => setName(e.currentTarget.value)} error={error} />
+            <Group justify="flex-end" gap="xs">
+              <Button variant="default" onClick={() => setOpened(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={busy} disabled={!name.trim()}>
+                Pin to Home
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+    </>
   );
 }

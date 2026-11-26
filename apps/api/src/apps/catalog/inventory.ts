@@ -80,6 +80,7 @@ export const inventory: AppBlueprint = {
     ],
   },
   reminders: [{ table: "products.products", label: "Products low on stock", filters: [{ field: "low_stock", op: "eq", value: "Low" }], who: "$managers" }],
+  reports: [{ name: "Purchases by month", table: "purchase_orders", groupBy: "date", show: "sum:total", chart: "line" }],
   dashboard: {
     tiles: [
       { label: "Products low on stock", table: "products.products", filters: [{ field: "low_stock", op: "eq", value: "Low" }] },

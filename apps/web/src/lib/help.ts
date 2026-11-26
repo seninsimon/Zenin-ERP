@@ -70,10 +70,11 @@ export const HELP = {
   spreadsheet: {
     title: "Spreadsheet view",
     text: [
-      "Adds a Spreadsheet view to this table: click a cell and type, Enter saves; paste rows from Excel or Google Sheets. Several people can work at once.",
+      "On for every table: click a cell and type, Enter saves; paste rows from Excel or Google Sheets; Ctrl+Z undoes. Several people can work at once.",
       "Every value is checked like a normal save, and people change only what their level allows. If two people change the same cell, nothing is overwritten: the second is asked.",
+      "Turn it off for tables where nobody should change many records at once.",
     ],
-    example: "A price list or stock count that people update all day.",
+    example: "Off for Payslips; on for a price list or stock count people update all day.",
   },
   sameAccess: {
     title: "Same access as…",

@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { DataGrid, SelectColumn, type Column, type DataGridHandle } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 
-import { errorMessage, getTableData, insertData, updateData, type ListFilter } from "../../api/api";
+import { deleteData, errorMessage, getTableData, insertData, updateData, type ListFilter } from "../../api/api";
 import { useBulkDelete } from "../../api/reactQueryHooks/useTables";
 import { confirmDanger } from "../../components/ui/confirm";
 import { BulkUpdateModal } from "./BulkUpdateModal";
@@ -25,7 +25,9 @@ import classes from "./spreadsheet.module.css";
 // a grid. Click a cell and type; each cell saves on its own through the normal
 // save (same checks, same history), telling the server the value it started
 // from, so a change someone made meanwhile is never overwritten. Paste a block
-// from Excel or Google Sheets. Others' changes come in live.
+// from Excel or Google Sheets. Others' changes come in live. Ctrl+Z (or Undo
+// in the message) puts the last change back, cell by cell, only where nobody
+// changed the cell since (workspace/SHEET_UNDO_PLAN.md).
 
 const PAGE = 100;
 const MAX_PASTE_ROWS = 200;
@@ -48,12 +50,24 @@ type Range = { r1: number; c1: number; r2: number; c2: number };
 // the grid's first columns: row tick boxes, then "open the record"
 const DATA_START = 2;
 const MAX_CLEAR_WITHOUT_ASKING = 20;
+// changes Undo remembers (this tab only)
+const MAX_UNDO = 20;
+
+// one cell changed: back to `before` while it's still `after` (as stored)
+type Change = { id: string; col: string; before: unknown; after: unknown };
+// one thing done in the sheet: a typed cell, a fill, a paste, Delete; and
+// the records it made (pasted below the last row, a new row)
+type Step = { what: string; changes: Change[]; created: string[] };
+type ApiError = { response?: { status?: number; data?: { errors?: Record<string, string> } } };
 
 const key = (id: string, col: string) => `${id}:${col}`;
 const same = (a: unknown, b: unknown) => {
   const empty = (v: unknown) => v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length);
   return (empty(a) && empty(b)) || JSON.stringify(a) === JSON.stringify(b);
 };
+// what the server stored for a written cell (it sends them back); the value sent if not
+const storedValue = (res: { data?: { saved?: Record<string, unknown> } }, col: string, sent: unknown) =>
+  res.data?.saved && col in res.data.saved ? res.data.saved[col] : (sent ?? null);
 const plain = (v: unknown) => (Array.isArray(v) ? v.join(", ") : v === null || v === undefined ? "" : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v));
 
 /* ---------------- one cell being edited ---------------- */
@@ -177,6 +191,11 @@ export function SpreadsheetView({
   const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(() => new Set());
   const [bulkEdit, setBulkEdit] = useState(false);
   const bulkDelete = useBulkDelete(table);
+  // Undo: the last changes made here, newest last
+  const undoStack = useRef<Step[]>([]);
+  useEffect(() => {
+    undoStack.current = [];
+  }, [table]);
 
   const saved: Row[] = useMemo(
     () =>
@@ -239,13 +258,14 @@ export function SpreadsheetView({
   const required = columns.filter((c) => c.required && !READ_ONLY_TYPES.includes(c.type));
   const titleOf = (row: Row) => plain(row.show[columns[0]?.name]) || "this record";
 
-  // one cell saved, from the value it started with
-  const saveCell = async (row: Row, column: RecordColumn, value: unknown, was: unknown) => {
+  // one cell saved, from the value it started with; `done` collects it for Undo
+  const saveCell = async (row: Row, column: RecordColumn, value: unknown, was: unknown, done?: Change[]) => {
     const id = row._id;
     setPending((p) => ({ ...p, [key(id, column.name)]: value }));
     setCell(id, column.name, { state: "saving" });
     try {
-      await updateData(table, id, { [column.name]: value, _expected: { [column.name]: was ?? null } });
+      const res = await updateData(table, id, { [column.name]: value, _expected: { [column.name]: was ?? null } });
+      done?.push({ id, col: column.name, before: was ?? null, after: storedValue(res, column.name, value) });
       flashSaved(id, column.name);
     } catch (err) {
       const errors = (err as { response?: { status?: number; data?: { errors?: Record<string, string> } } }).response?.data?.errors;
@@ -265,7 +285,9 @@ export function SpreadsheetView({
     if (missing.length) return;
     setCell(row._id, "_row", { state: "saving" });
     try {
-      await insertData(table, { ...row.raw, ...newRecordDepartments() });
+      const res = await insertData(table, { ...row.raw, ...newRecordDepartments() });
+      const created = res.data?.data?.insertedId as string | undefined;
+      if (created) remember({ what: "New row", changes: [], created: [created] });
       setDrafts((d) => d.filter((x) => x._id !== row._id));
       await refetch();
     } catch (err) {
@@ -276,6 +298,9 @@ export function SpreadsheetView({
   const onRowsChange = (next: Row[], data: { indexes: number[]; column: { key: string } }) => {
     const column = columns.find((c) => c.name === data.column.key);
     if (!column) return;
+    // a typed cell, or (several rows) the fill handle: one step for Undo
+    const done: Change[] = [];
+    const saving: Promise<void>[] = [];
     for (const i of data.indexes) {
       const row = next[i];
       const before = rows[i];
@@ -284,8 +309,17 @@ export function SpreadsheetView({
         const updated = { ...row, show: { ...row.show, [column.name]: row.raw[column.name] } };
         setDrafts((d) => d.map((x) => (x._id === row._id ? updated : x)));
         void saveDraft(updated);
-      } else void saveCell(before, column, row.raw[column.name], before.raw[column.name]);
+      } else saving.push(saveCell(before, column, row.raw[column.name], before.raw[column.name], done));
     }
+    if (!saving.length) return;
+    void Promise.all(saving).then(() => {
+      if (saving.length === 1) remember({ what: `${columnLabel(column)} change`, changes: done, created: [] });
+      else if (done.length) {
+        const step: Step = { what: "Fill", changes: done, created: [] };
+        remember(step);
+        announce(step, "Filled", `${pluralize(done.length, "cell")} filled`, "green");
+      }
+    });
   };
 
   // paste a block from Excel or Google Sheets, from the active cell on; onto a
@@ -302,6 +336,7 @@ export function SpreadsheetView({
     const cache = newLookupCache();
     let saved = 0;
     let problems = 0;
+    const step: Step = { what: "Paste", changes: [], created: [] };
     setPasting({ done: 0, total: matrix.length });
     for (const [r, cellsText] of matrix.entries()) {
       const target = rows[start.rowIdx + r];
@@ -323,10 +358,15 @@ export function SpreadsheetView({
       if (Object.keys(values).length) {
         try {
           if (target && !target.draft) {
-            await updateData(table, target._id, { ...values, _expected: expected });
-            Object.keys(values).forEach((col) => flashSaved(target._id, col));
-          } else if (perms.create) await insertData(table, { ...values, ...newRecordDepartments() });
-          else problems++;
+            const res = await updateData(table, target._id, { ...values, _expected: expected });
+            for (const col of Object.keys(values)) {
+              step.changes.push({ id: target._id, col, before: expected[col] ?? null, after: storedValue(res, col, values[col]) });
+              flashSaved(target._id, col);
+            }
+          } else if (perms.create) {
+            const res = await insertData(table, { ...values, ...newRecordDepartments() });
+            if (res.data?.data?.insertedId) step.created.push(res.data.data.insertedId as string);
+          } else problems++;
           saved++;
         } catch (err) {
           problems++;
@@ -338,11 +378,13 @@ export function SpreadsheetView({
     }
     setPasting(null);
     await refetch();
-    notifications.show({
-      title: problems ? "Pasted, with some problems" : "Pasted",
-      message: `${pluralize(saved, "row")} saved${problems ? `, ${pluralize(problems, "cell")} not: see the red cells` : ""}`,
-      color: problems ? "yellow" : "green",
-    });
+    remember(step);
+    announce(
+      step,
+      problems ? "Pasted, with some problems" : "Pasted",
+      `${pluralize(saved, "row")} saved${problems ? `, ${pluralize(problems, "cell")} not: see the red cells` : ""}`,
+      problems ? "yellow" : "green"
+    );
   };
 
   // Delete: empties the selected cells (or the active one) that can be changed
@@ -361,18 +403,24 @@ export function SpreadsheetView({
     const count = [...byRow.values()].reduce((n, list) => n + list.length, 0);
     if (!count) return;
     const run = async () => {
+      const step: Step = { what: "Delete", changes: [], created: [] };
       for (const [row, list] of byRow) {
         const values = Object.fromEntries(list.map((c) => [c.name, c.multiple ? [] : null]));
         const expected = Object.fromEntries(list.map((c) => [c.name, row.raw[c.name] ?? null]));
         try {
-          await updateData(table, row._id, { ...values, _expected: expected });
-          list.forEach((c) => flashSaved(row._id, c.name));
+          const res = await updateData(table, row._id, { ...values, _expected: expected });
+          for (const c of list) {
+            step.changes.push({ id: row._id, col: c.name, before: expected[c.name], after: storedValue(res, c.name, values[c.name]) });
+            flashSaved(row._id, c.name);
+          }
         } catch (err) {
           const errors = (err as { response?: { data?: { errors?: Record<string, string> } } }).response?.data?.errors ?? {};
           for (const c of list) setCell(row._id, c.name, { state: "error", message: errors[c.name] ?? errorMessage(err) });
         }
       }
       await refetch();
+      remember(step);
+      if (step.changes.length > 1) announce(step, "Emptied", `${pluralize(step.changes.length, "cell")} emptied`, "green");
     };
     if (count > MAX_CLEAR_WITHOUT_ASKING) {
       confirmDanger({
@@ -382,6 +430,100 @@ export function SpreadsheetView({
         onConfirm: run,
       });
     } else void run();
+  };
+
+  /* ---- Undo ---- */
+
+  const remember = (step: Step) => {
+    if (!step.changes.length && !step.created.length) return;
+    undoStack.current = [...undoStack.current, step].slice(-MAX_UNDO);
+  };
+
+  // a message with an Undo button for this step (paste, fill, Delete on a block)
+  const announce = (step: Step, title: string, message: string, color: string) => {
+    const id = `sheet-${Date.now()}-${Math.random()}`;
+    notifications.show({
+      id,
+      title,
+      color,
+      message: (
+        <Group gap="xs" justify="space-between" wrap="nowrap">
+          <span>{message}</span>
+          <Button
+            size="compact-xs"
+            variant="default"
+            onClick={() => {
+              notifications.hide(id);
+              void undo(step);
+            }}
+          >
+            Undo
+          </Button>
+        </Group>
+      ),
+    });
+  };
+
+  // Put one record's cells back; on a clash, cell by cell so the others still go back.
+  const putBack = async (id: string, list: Change[]): Promise<{ back: number; kept: number; by: string | null; failed: number }> => {
+    try {
+      await updateData(table, id, {
+        ...Object.fromEntries(list.map((c) => [c.col, c.before])),
+        _expected: Object.fromEntries(list.map((c) => [c.col, c.after])),
+      });
+      return { back: list.length, kept: 0, by: null, failed: 0 };
+    } catch (err) {
+      const res = (err as ApiError).response;
+      if (res?.status === 409 && res.data?.errors?._cellConflict) {
+        if (list.length === 1) return { back: 0, kept: 1, by: res.data.errors._by ?? null, failed: 0 };
+        const parts = await Promise.all(list.map((c) => putBack(id, [c])));
+        return parts.reduce((a, b) => ({ back: a.back + b.back, kept: a.kept + b.kept, by: a.by ?? b.by, failed: a.failed + b.failed }));
+      }
+      if (res?.status === 404) return { back: 0, kept: 0, by: null, failed: 0 }; // deleted since: nothing to put back
+      return { back: 0, kept: 0, by: null, failed: list.length };
+    }
+  };
+
+  // Undo a step (the newest one when none is given)
+  const undo = async (given?: Step) => {
+    const stack = undoStack.current;
+    const step = given ?? stack[stack.length - 1];
+    if (!step || !stack.includes(step)) {
+      notifications.show({ message: given ? "That was already undone" : "Nothing to undo", color: "gray" });
+      return;
+    }
+    undoStack.current = stack.filter((s) => s !== step);
+    const byRecord = new Map<string, Change[]>();
+    for (const c of step.changes) byRecord.set(c.id, [...(byRecord.get(c.id) ?? []), c]);
+    const results = await Promise.all([...byRecord].map(([id, list]) => putBack(id, list)));
+    const total = results.reduce((a, b) => ({ back: a.back + b.back, kept: a.kept + b.kept, by: a.by ?? b.by, failed: a.failed + b.failed }), { back: 0, kept: 0, by: null as string | null, failed: 0 });
+    // records it made: removed again, if you may delete
+    let removed = 0;
+    let stayed = 0;
+    for (const id of step.created) {
+      if (!perms.delete) {
+        stayed++;
+        continue;
+      }
+      try {
+        await deleteData(table, id);
+        removed++;
+      } catch {
+        stayed++;
+      }
+    }
+    await refetch();
+    const notes = [
+      total.kept ? `${pluralize(total.kept, "cell")} changed by ${total.by ?? "someone else"} since: left as they are` : "",
+      total.failed ? `${pluralize(total.failed, "cell")} couldn't be put back` : "",
+      stayed ? `${pluralize(stayed, "new row")} stayed (you can't delete records here)` : "",
+    ].filter(Boolean);
+    const did = [total.back ? `${pluralize(total.back, "cell")} put back` : "", removed ? `${pluralize(removed, "new row")} removed` : ""].filter(Boolean);
+    notifications.show({
+      title: notes.length ? `${step.what} partly undone` : `${step.what} undone`,
+      message: [...did, ...notes].join(". ") || "Nothing needed changing",
+      color: notes.length ? "yellow" : "green",
+    });
   };
 
   // Shift+arrows: grow or shrink the block from where it started
@@ -518,7 +660,7 @@ export function SpreadsheetView({
         {many && block
           ? `${pluralize((block.bottom - block.top + 1) * (block.right - block.left + 1), "cell")} selected: Ctrl+C copies, Ctrl+V pastes into them, Delete empties them. `
           : ""}
-        Click a cell and type; Enter saves, Esc cancels. Drag or Shift+click to select cells. Paste rows from Excel or Google Sheets.
+        Click a cell and type; Enter saves, Esc cancels. Drag or Shift+click to select cells. Paste rows from Excel or Google Sheets. Ctrl+Z undoes.
         {heldBack ? " Others' changes show every few seconds." : " Others' changes show as they happen."}
         {schema.byDepartment !== false && (schema.allowedDepartments?.length ?? 0) > 1 && ` New rows go to ${schema.allowedDepartments![0].name}.`}
       </Text>
@@ -564,6 +706,12 @@ export function SpreadsheetView({
             }
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
               setRange({ r1: 0, c1: DATA_START, r2: rows.length - 1, c2: lastCol });
+              event.preventGridDefault();
+              event.preventDefault();
+              return;
+            }
+            if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+              void undo();
               event.preventGridDefault();
               event.preventDefault();
               return;

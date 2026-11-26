@@ -835,9 +835,10 @@ in the web app `features/chat/`, `pages/ChatPage.tsx` and
 ### The Spreadsheet view
 
 A table's records as a grid, like Excel (`features/records/SpreadsheetView.tsx`,
-react-data-grid 7). An admin switches it on per table: Tables → the table →
-Access → **Spreadsheet view** (`table_schemas.spreadsheet`, migration 017;
-`PUT /schema/:table { spreadsheet }`). There's no separate "who may use
+react-data-grid 7). It's **on for every table** (migration 019 turned it on
+and made it the default); an admin can switch it off per table: Tables → the
+table → Access → **Spreadsheet view** (`table_schemas.spreadsheet`;
+`PUT /schema/:table { spreadsheet }`), e.g. for Payslips. There's no separate "who may use
 it": people see and change what their level allows, and hidden fields never
 appear. Phones don't get it (`?view=sheet` falls back to the list).
 - **Rows:** `GET /table/:t?withRaw=1` gives the usual names to show and, in
@@ -869,6 +870,18 @@ appear. Phones don't get it (`?view=sheet` falls back to the list).
   people, links and departments by name). Each row is one normal save, with
   `_expected` for the cells it changes; rows past the end become new records.
   A notification sums it up; problem cells turn red.
+- **Undo** (Ctrl+Z / Cmd+Z on a cell, or **Undo** in the message after a
+  paste, fill or Delete on a block): the last 20 steps, in this tab only.
+  - A step is one typed cell, one fill, one paste or one Delete. It keeps,
+    per cell, the value before and the value **as stored** after (every
+    `PUT /table/:t/:id` answers `saved: { field: stored value }`; "8" typed
+    in a number is 8), plus the records a paste or a new row made.
+  - Undo sends the old values with `_expected` = the stored ones, one
+    request per record; on a clash it goes cell by cell. A cell someone
+    changed since is left alone ("1 cell changed by Asha since: left as they
+    are"). Records the step made are deleted again, if you may delete.
+  - No Redo. "Change a field" and "Delete rows" aren't in Undo (they ask
+    first; the audit log has the old values).
 - **Selecting like Excel** (the grid itself selects one cell; the rest is
   ours): drag across cells (the cell under the pointer is found with
   `elementFromPoint`, since the grid holds on to the mouse), Shift+click, or

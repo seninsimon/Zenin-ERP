@@ -33,11 +33,12 @@ describe("Spreadsheet view", async () => {
   const shelf = (await admin.post(`/api/table/${places}`, { name: "Shelf A" }).expect(200)).body.data.insertedId;
   const id = (await admin.post(`/api/table/${items}`, { name: "Bolts", qty: 4, cost: 9, place: shelf }).expect(200)).body.data.insertedId;
 
-  it("is off until an admin switches it on for a table", async () => {
-    expect((await asha.get(`/api/schema/${items}`)).body.spreadsheet).toBe(false);
-    await admin.put(`/api/schema/${items}`, { spreadsheet: true }).expect(200);
+  it("is on for every table; only an admin can switch it off", async () => {
     expect((await asha.get(`/api/schema/${items}`)).body.spreadsheet).toBe(true);
     expect((await asha.put(`/api/schema/${items}`, { spreadsheet: false })).status).toBe(403);
+    await admin.put(`/api/schema/${items}`, { spreadsheet: false }).expect(200);
+    expect((await asha.get(`/api/schema/${items}`)).body.spreadsheet).toBe(false);
+    await admin.put(`/api/schema/${items}`, { spreadsheet: true }).expect(200);
   });
 
   it("rows can come with their stored values, hidden fields left out", async () => {
@@ -65,6 +66,20 @@ describe("Spreadsheet view", async () => {
     await asha.put(`/api/table/${items}/${id}`, { qty: 6, _expected: { qty: 7 } }).expect(200);
     // other cells of the same record don't clash
     await ravi.put(`/api/table/${items}/${id}`, { name: "Bolts M6", _expected: { name: "Bolts" } }).expect(200);
+  });
+
+  it("Undo: a save says what was stored, and putting it back is refused once someone changed it", async () => {
+    const res = (await asha.put(`/api/table/${items}/${id}`, { qty: "8", _expected: { qty: 6 } }).expect(200)).body;
+    expect(res.saved).toEqual({ qty: 8 }); // as stored ("8" typed is the number 8)
+    // Undo the qty: back to 6, from what was saved
+    await asha.put(`/api/table/${items}/${id}`, { qty: 6, _expected: { qty: res.saved.qty } }).expect(200);
+    expect((await admin.get(`/api/table/${items}/${id}`)).body.qty).toBe(6);
+    // after Ravi's change, Asha's Undo would overwrite it: refused
+    const mine = (await asha.put(`/api/table/${items}/${id}`, { qty: 10, _expected: { qty: 6 } }).expect(200)).body.saved;
+    await ravi.put(`/api/table/${items}/${id}`, { qty: 11, _expected: { qty: 10 } }).expect(200);
+    const undo = await asha.put(`/api/table/${items}/${id}`, { qty: 6, _expected: mine });
+    expect(undo.status).toBe(409);
+    expect((await admin.get(`/api/table/${items}/${id}`)).body.qty).toBe(11);
   });
 
   it("can't be used to guess a hidden field", async () => {

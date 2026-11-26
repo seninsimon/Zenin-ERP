@@ -596,7 +596,13 @@ export async function updateHandler(req: Request, res: Response) {
   }
   await deleteUploads(removed);
 
-  res.json({ message: "Updated successfully", result: { acknowledged: true, matchedCount: 1, modifiedCount: 1 } });
+  res.json({
+    message: "Updated successfully",
+    result: { acknowledged: true, matchedCount: 1, modifiedCount: 1 },
+    // the written fields as stored ("8" typed in a number is 8): the
+    // Spreadsheet's Undo puts them back only if they're still these
+    saved: Object.fromEntries(Object.keys(values).map((k) => [k, after[k] ?? null])),
+  });
 }
 
 export async function deleteHandler(req: Request, res: Response) {

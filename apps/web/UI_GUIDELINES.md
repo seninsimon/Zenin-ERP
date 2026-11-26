@@ -524,7 +524,7 @@ Target: **WCAG 2.2 AA**.
 | Record values | `FieldValue` |
 | Nothing to show | `EmptyState` |
 | Explain an idea that isn't obvious | `HelpTip` / `WithHelp`, text in `lib/help.ts` (§9) |
-| Editing many records like a spreadsheet | `SpreadsheetView` (react-data-grid): Zenin's colours through the `--rdg-*` variables (`spreadsheet.module.css`), `rdg-dark` / `rdg-light` from the colour scheme, the form's `FieldInput` as the cell editor, per-cell states (saving, saved, error) as cell classes, one clash banner at a time |
+| Editing many records like a spreadsheet | `SpreadsheetView` (react-data-grid): Zenin's colours through the `--rdg-*` variables (`spreadsheet.module.css`), `rdg-dark` / `rdg-light` from the colour scheme, the form's `FieldInput` as the cell editor, per-cell states (saving, saved, error) as cell classes, one clash banner at a time; a change to many cells (paste, fill, Delete on a block) says so in a message with an **Undo** button, and Ctrl+Z undoes the last change |
 | Settings for many things × many options (access levels) | One thing at a time (a list on the left, a dropdown on phones), a grid with a sticky first column and `scope="col"` headers, changed cells outlined, one save bar with a count (`AccessLevelsPage.tsx`) |
 | Delete/disable confirmation | `confirmDanger` |
 | Dates, numbers, file names | `lib/format.ts` |

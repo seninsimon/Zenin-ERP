@@ -46,7 +46,7 @@ const toSchema = (row: SchemaRow): TableSchema => ({
   showInMenu: row.show_in_menu,
   departments: row.departments ?? [],
   byDepartment: row.by_department ?? true,
-  spreadsheet: row.spreadsheet ?? false,
+  spreadsheet: row.spreadsheet ?? true,
   blueprintKey: row.blueprint_key ?? null,
   appKey: row.app_key ?? null,
   createdAt: row.created_at,

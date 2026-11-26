@@ -278,10 +278,23 @@ tables.
     **Add N people**; nothing is saved before that. On phones the check sits
     under each row (no sideways scrolling);
   - the rows that failed come back as a file with a "Problem" column.
+- **Summaries (numbers by group):** a chart, then a plain table: one row
+  per group, numbers right-aligned with `tabular-nums`, an "All" row at the
+  bottom. A row (and a bar or slice) opens its records. On phones the same
+  (two or three columns fit).
+- **Charts** (`@mantine/charts`): one series in the primary colour; a line
+  only over time; a donut only for shares of a choice, in the choice's own
+  colours, with colour keys in the table beside it. Never two value axes.
+  The numbers are always also in a table. Hover shows the value. Load the
+  chart code lazily.
 - **Short lists of things you manage** (Manage apps): one row each in a
   Section with `padding={0}`: icon, name, one dimmed line, and on the right
   one button (Add) or a ⋯ menu (Rename, Remove…). No grid of big cards; no
   small print nobody acts on.
+- **Locked records:** an orange `LockedBanner` above the details ("Locked:
+  Status is Paid", what it means, **Reopen** for those who may); the
+  actions that can't work (Edit, Delete) are hidden, not shown disabled.
+  Reopen always asks why.
 - **Shown once** (temporary passwords): a yellow box, **Download** button, and
   closing without downloading asks first.
 - **Alignment:**

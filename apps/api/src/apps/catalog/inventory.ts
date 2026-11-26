@@ -33,7 +33,7 @@ export const inventory: AppBlueprint = {
         link("supplier", "Supplier", "suppliers", { required: true }),
         date("date", "Ordered on", { default: "today" }),
         date("expected", "Expected on"),
-        choice("status", "Status", [["Draft", "gray"], ["Ordered", "blue"], ["Received", "green"], ["Cancelled", "red"]], { default: "Draft" }),
+        choice("status", "Status", [["Draft", "gray"], ["Ordered", "blue"], ["Received", "green"], ["Cancelled", "red"]], { default: "Draft", lockAt: ["Received", "Cancelled"] }),
         rollup("total", "Total", { from: "po_lines", via: "po", fn: "sum", field: "amount" }),
         longText("notes", "Notes", { showInTable: false }),
       ],

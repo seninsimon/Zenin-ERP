@@ -26,6 +26,8 @@ export interface ChoiceOption {
   color: string;
   // an approval step: only these roles may choose it (admins always may)
   roles?: string[];
+  // the record is locked at this status ("Paid"); Managers can reopen it
+  locks?: boolean;
 }
 
 // May this user choose this option? (approval steps)

@@ -1,0 +1,23 @@
+/* The Summary view (SummaryView.tsx) */
+.summary tfoot th,
+.summary tfoot td {
+  border-top: 1px solid var(--app-border);
+}
+
+/* a group: its name and a bar, the whole cell clickable */
+.groupButton {
+  display: block;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.groupButton:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

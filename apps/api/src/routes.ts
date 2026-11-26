@@ -6,6 +6,7 @@ import { uploadHandler } from "./controllers/files.js";
 import { departmentOptionsHandler, userOptionsHandler } from "./controllers/people.js";
 import * as jobs from "./controllers/jobs.js";
 import * as records from "./controllers/records.js";
+import * as summary from "./controllers/summary.js";
 import * as apps from "./controllers/apps.js";
 import * as levels from "./controllers/levels.js";
 import * as peopleImport from "./controllers/peopleImport.js";
@@ -152,6 +153,7 @@ r.get("/table/:collection", requireAuth, handle(records.listHandler));
 r.post("/table/:collection", requireAuth, handle(records.createHandler));
 // these must come before "/table/:collection/:id"
 r.get("/table/:collection/options", requireAuth, handle(records.optionsHandler));
+r.get("/table/:collection/summary", requireAuth, handle(summary.summaryHandler));
 r.post("/table/:collection/export", requireAuth, handle(jobs.startExportHandler));
 r.post("/table/:collection/bulk-delete", requireAuth, handle(records.bulkDeleteHandler));
 r.post("/table/:collection/bulk-update", requireAuth, handle(records.bulkUpdateHandler));
@@ -163,6 +165,7 @@ r.post("/table/:collection/:id/comments", requireAuth, handle(comments.addCommen
 r.put("/table/:collection/:id/comments/:commentId", requireAuth, handle(comments.editComment));
 r.delete("/table/:collection/:id/comments/:commentId", requireAuth, handle(comments.deleteComment));
 r.put("/table/:collection/:id", requireAuth, handle(records.updateHandler));
+r.post("/table/:collection/:id/reopen", requireAuth, handle(records.reopenHandler));
 r.delete("/table/:collection/:id", requireAuth, handle(records.deleteHandler));
 
 // ---- files ----

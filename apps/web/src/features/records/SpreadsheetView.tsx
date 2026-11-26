@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Alert, Badge, Box, Button, Group, Loader, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
-import { IconAlertTriangle, IconArrowUpRight, IconPlus } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowUpRight, IconLock, IconPlus } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -39,6 +39,8 @@ const PICKER_TYPES = ["choice", "user", "relation", "department", "boolean", "da
 type Row = {
   _id: string;
   draft?: boolean;
+  // locked at a status ("Paid"): read-only
+  locked?: string;
   _updatedAt?: string;
   raw: Record<string, unknown>; // stored values (ids), to edit and compare
   show: Record<string, unknown>; // names, to show
@@ -211,7 +213,7 @@ export function SpreadsheetView({
             show[c.name] = ["user", "relation", "department"].includes(c.type) ? "…" : pending[k];
           }
         }
-        return { _id: id, _updatedAt: r._updatedAt as string | undefined, raw, show };
+        return { _id: id, _updatedAt: r._updatedAt as string | undefined, locked: (r._locked as string | undefined) ?? undefined, raw, show };
       }),
     [query.data, columns, pending]
   );
@@ -254,6 +256,7 @@ export function SpreadsheetView({
     return schema.byDepartment !== false && mine.length > 1 ? { _departmentIds: [mine[0]._id] } : {};
   };
   const editable = (c: RecordColumn, row: Row) =>
+    !row.locked &&
     !READ_ONLY_TYPES.includes(c.type) && !(c.type === "relation" && c.inline) && (row.draft ? Boolean(perms.create) : Boolean(perms.edit));
   const required = columns.filter((c) => c.required && !READ_ONLY_TYPES.includes(c.type));
   const titleOf = (row: Row) => plain(row.show[columns[0]?.name]) || "this record";
@@ -551,9 +554,17 @@ export function SpreadsheetView({
             </Badge>
           </Tooltip>
         ) : (
-          <Tooltip label="Open the record">
-            <ActionIcon component={Link} to={recordPath(table, row._id)} size="sm" variant="subtle" color="gray" aria-label={`Open ${titleOf(row)}`} tabIndex={-1}>
-              <IconArrowUpRight size={14} />
+          <Tooltip label={row.locked ? `Locked (${row.locked}): open the record to reopen it` : "Open the record"}>
+            <ActionIcon
+              component={Link}
+              to={recordPath(table, row._id)}
+              size="sm"
+              variant="subtle"
+              color={row.locked ? "orange" : "gray"}
+              aria-label={row.locked ? `Open ${titleOf(row)} (locked)` : `Open ${titleOf(row)}`}
+              tabIndex={-1}
+            >
+              {row.locked ? <IconLock size={14} /> : <IconArrowUpRight size={14} />}
             </ActionIcon>
           </Tooltip>
         ),

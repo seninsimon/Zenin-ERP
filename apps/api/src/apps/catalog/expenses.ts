@@ -26,6 +26,7 @@ export const expenses: AppBlueprint = {
         choice("status", "Status", [["Submitted", "orange"], ["Approved", "blue"], ["Rejected", "red"], ["Reimbursed", "green"]], {
           default: "Submitted",
           onlyManagers: ["Approved", "Rejected", "Reimbursed"],
+          lockAt: ["Rejected", "Reimbursed"],
         }),
         longText("notes", "Notes", { showInTable: false }),
       ],

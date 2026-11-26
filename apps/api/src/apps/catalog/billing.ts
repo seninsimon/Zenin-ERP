@@ -39,7 +39,7 @@ export const billing: AppBlueprint = {
         link("customer", "Customer", "customers.companies", { required: true }),
         date("date", "Date", { default: "today" }),
         date("due", "Due"),
-        choice("status", "Status", [["Draft", "gray"], ["Sent", "blue"], ["Paid", "green"], ["Overdue", "red"], ["Cancelled", "yellow"]], { default: "Draft" }),
+        choice("status", "Status", [["Draft", "gray"], ["Sent", "blue"], ["Paid", "green"], ["Overdue", "red"], ["Cancelled", "yellow"]], { default: "Draft", lockAt: ["Paid", "Cancelled"] }),
         rollup("subtotal", "Subtotal", { from: "invoice_lines", via: "invoice", fn: "sum", field: "amount" }),
         num("tax_pct", "Tax %", { default: 18 }),
         formula("tax", "Tax", "ROUND({subtotal} * {tax_pct} / 100, 2)"),

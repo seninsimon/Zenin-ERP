@@ -17,6 +17,7 @@ import { withDefaults } from "../schema/defaults.js";
 import { applyFormulas } from "../schema/formula.js";
 import { refreshParents } from "../schema/rollups.js";
 import { checkChoices, checkRequired, coerceValues } from "../schema/validateRecord.js";
+import { lockOf } from "../schema/locks.js";
 import { storage } from "../storage.js";
 import type { Column, CurrentUser, RecordData, TableSchema } from "../types.js";
 import { CREATED_BY_HEADER, DEPARTMENT_HEADER, ID_HEADER, LEGACY_DEPARTMENT_HEADER, PROBLEM_HEADER, parseCell } from "./csv.js";
@@ -257,6 +258,13 @@ export async function runImport(job: Job) {
           fail(row, messages.join("; "));
           continue;
         }
+        // locked at a status ("Paid"): a manager must reopen it first
+        const lock = await lockOf(schema, record.data);
+        if (lock) {
+          failed++;
+          fail(row, `Locked: ${lock.column.label || lock.column.name} is ${lock.option.label} (a manager can reopen it)`);
+          continue;
+        }
         for (const c of schema.columns) if (["autonumber", "formula", "rollup"].includes(c.type)) delete row.payload[c.name];
         const { values, errors: fieldErrors } = coerceValues(schema, row.payload);
         messages.push(...withCells(row, fieldErrors));
@@ -283,6 +291,9 @@ export async function runImport(job: Job) {
       }
       const { values, errors: fieldErrors } = coerceValues(schema, withDefaults(schema, row.payload, user));
       messages.push(...withCells(row, fieldErrors));
+      // a line added to a locked record (a paid invoice)
+      const parentLocked = await lockOf(schema, values);
+      if (parentLocked && parentLocked.parent) messages.push(`Locked: the record it belongs to is ${parentLocked.option.label}`);
       const rule = await ownRules(schema, values, null, user);
       if (rule) messages.push(rule);
       messages.push(...Object.values(checkRequired(schema, values, hidden)), ...Object.values(checkChoices(schema, values, {}, user)));

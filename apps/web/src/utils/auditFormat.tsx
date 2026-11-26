@@ -46,6 +46,7 @@ const ACTION_COLORS: Record<string, string> = {
   password_change: "yellow",
   settings: "cyan",
   assign_unassigned: "cyan",
+  reopen: "orange",
 };
 
 // column settings in the history of a column
@@ -53,6 +54,8 @@ const CHANGE_LABELS: Record<string, string> = {
   options: "Options",
   recordsUpdated: "Records updated",
   showInTable: "Shown in list",
+  // a locked record reopened: why
+  _reason: "Reason",
 };
 
 // stored action names that read badly as-is

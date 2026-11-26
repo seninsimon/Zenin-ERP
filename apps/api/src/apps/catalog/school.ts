@@ -88,7 +88,7 @@ export const school: AppBlueprint = {
         date("due", "Due"),
         num("paid", "Paid"),
         formula("balance", "Balance", "{amount} - {paid}"),
-        choice("status", "Status", [["Due", "orange"], ["Partly paid", "yellow"], ["Paid", "green"]], { default: "Due" }),
+        choice("status", "Status", [["Due", "orange"], ["Partly paid", "yellow"], ["Paid", "green"]], { default: "Due", lockAt: ["Paid"] }),
       ],
     },
   ],

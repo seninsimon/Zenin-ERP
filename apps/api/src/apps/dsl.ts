@@ -18,8 +18,17 @@ export const image = (name: string, label: string, extra: Extra = {}): ColumnBlu
 export const file = (name: string, label: string, extra: Extra = {}): ColumnBlueprint => ({ name, label, type: "file", ...extra });
 export const files = (name: string, label: string, extra: Extra = {}): ColumnBlueprint => ({ name, label, type: "files", ...extra });
 // a fixed list of options: plain labels, or [label, colour] pairs
-export const choice = (name: string, label: string, options: (string | [string, string])[], extra: Extra = {}): ColumnBlueprint => ({
-  name, label, type: "choice", options: options.map((o) => (typeof o === "string" ? { label: o } : { label: o[0], color: o[1] })), ...extra,
+// `lockAt: ["Paid"]`: the record is locked at those statuses (schema/locks.ts)
+export const choice = (name: string, label: string, options: (string | [string, string])[], { lockAt, ...extra }: Extra & { lockAt?: string[] } = {}): ColumnBlueprint => ({
+  name,
+  label,
+  type: "choice",
+  options: options.map((o) => {
+    const option: Record<string, unknown> = typeof o === "string" ? { label: o } : { label: o[0], color: o[1] };
+    if (lockAt?.includes(String(option.label))) option.locks = true;
+    return option;
+  }),
+  ...extra,
 });
 // INV-0001, INV-0002, ... given automatically to new records
 export const autonum = (name: string, label: string, prefix: string, extra: Extra = {}): ColumnBlueprint => ({

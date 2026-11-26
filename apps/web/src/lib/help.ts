@@ -158,6 +158,14 @@ export const HELP = {
     ],
     example: "Only HR Managers can set a leave request's Status to Approved.",
   },
+  lockRecord: {
+    title: "Lock the record",
+    text: [
+      "When a record reaches this status, nobody can change or delete it: not in the form, the spreadsheet, an import or a bulk change. Its line items are locked too.",
+      "Managers of the app (and admins) see Reopen on it: they give a reason, choose the status it goes back to, and then it can be changed. The reason is kept in the audit log.",
+    ],
+    example: "Lock a leave request at Approved, so its dates can't change after approval.",
+  },
   automations: {
     title: "Automations",
     text: [

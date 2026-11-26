@@ -17,12 +17,14 @@ import {
   Text,
   TextInput,
   Tooltip,
+  VisuallyHidden,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   IconCalendarMonth,
   IconFileSpreadsheet,
+  IconChartBar,
   IconChevronDown,
   IconDots,
   IconDownload,
@@ -61,6 +63,8 @@ import { formatDateTime, formatNumber, pluralize } from "../../lib/format";
 import { readJson } from "../../lib/storage";
 import { BoardView } from "../../features/records/BoardView";
 import { CalendarView } from "../../features/records/CalendarView";
+import { SummaryView } from "../../features/records/SummaryView";
+import { SUMMARY_GROUP_TYPES, showOptions } from "../../features/records/summary";
 // the grid library loads only when someone opens the Spreadsheet view
 const SpreadsheetView = lazy(() => import("../../features/records/SpreadsheetView").then((m) => ({ default: m.SpreadsheetView })));
 import { BulkUpdateModal } from "../../features/records/BulkUpdateModal";
@@ -82,13 +86,14 @@ import { useAppCrumb } from "../../features/apps/appMenu";
 import { LiveChangeBar } from "../../features/live/LiveChangeBar";
 import { useLiveChanges } from "../../features/live/live";
 
-// an icon and a word, the word hidden on phones
+// an icon and a word, the word hidden on phones (still read out by screen readers)
 const ViewLabel = ({ icon: I, text }: { icon: Icon; text: string }) => (
   <Group gap={6} wrap="nowrap">
-    <I size={16} stroke={1.75} />
+    <I size={16} stroke={1.75} aria-hidden />
     <Text span size="sm" visibleFrom="sm">
       {text}
     </Text>
+    <VisuallyHidden hiddenFrom="sm">{text}</VisuallyHidden>
   </Group>
 );
 
@@ -145,16 +150,34 @@ export default function RecordListPage() {
   // Spreadsheet: when an admin switched it on for this table; not on phones
   const narrow = useMediaQuery("(max-width: 48em)");
   const sheetOn = Boolean(schema?.spreadsheet) && !narrow;
-  const view: "table" | "board" | "calendar" | "sheet" =
+  // Summary: grouped by a choice, person, department, link, Yes/No or date (by month)
+  const summaryColumns = (schema?.columns ?? []).filter((c) => SUMMARY_GROUP_TYPES.includes(c.type));
+  const view: "table" | "board" | "calendar" | "sheet" | "summary" =
     requested === "board" && boardColumns.length
       ? "board"
       : requested === "calendar" && dateColumns.length
         ? "calendar"
         : requested === "sheet" && sheetOn
           ? "sheet"
-          : "table";
+          : requested === "summary" && summaryColumns.length
+            ? "summary"
+            : "table";
   const groupBy = boardColumns.find((c) => c.name === params.get("by")) ?? boardColumns[0];
   const dateColumn = dateColumns.find((c) => c.name === params.get("on")) ?? dateColumns[0];
+  const summaryBy =
+    summaryColumns.find((c) => c.name === params.get("group")) ?? summaryColumns.find((c) => c.type === "choice") ?? summaryColumns[0];
+  const summaryShows = showOptions(schema?.columns ?? []);
+  const summaryShow = summaryShows.find((o) => o.value === params.get("show"))?.value ?? "count";
+  // a summary row clicked: its records in the Table view (Back returns to the summary)
+  const openGroup = (filter: Filter) =>
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const kept = url.filters.filter((f) => f.field !== filter.field);
+      next.set("f", JSON.stringify([...kept, filter]));
+      next.delete("view");
+      next.delete("page");
+      return next;
+    });
   const setViewParam = (key: string, value: string | null) =>
     setParams(
       (prev) => {
@@ -410,7 +433,7 @@ export default function RecordListPage() {
         actions={
           schema && (
             <>
-              {(boardColumns.length > 0 || dateColumns.length > 0 || sheetOn) && (
+              {(boardColumns.length > 0 || dateColumns.length > 0 || sheetOn || summaryColumns.length > 0) && (
                 <SegmentedControl
                   aria-label="View"
                   value={view}
@@ -420,6 +443,7 @@ export default function RecordListPage() {
                     ...(boardColumns.length ? [{ value: "board", label: <ViewLabel icon={IconLayoutKanban} text="Board" /> }] : []),
                     ...(dateColumns.length ? [{ value: "calendar", label: <ViewLabel icon={IconCalendarMonth} text="Calendar" /> }] : []),
                     ...(sheetOn ? [{ value: "sheet", label: <ViewLabel icon={IconFileSpreadsheet} text="Spreadsheet" /> }] : []),
+                    ...(summaryColumns.length ? [{ value: "summary", label: <ViewLabel icon={IconChartBar} text="Summary" /> }] : []),
                   ]}
                 />
               )}
@@ -644,6 +668,26 @@ export default function RecordListPage() {
                   w={180}
                 />
               )}
+              {view === "summary" && summaryBy && (
+                <>
+                  <Select
+                    aria-label="Group by"
+                    data={summaryColumns.map((c) => ({ value: c.name, label: `By ${columnLabel(c)}${c.type === "date" ? " (month)" : ""}` }))}
+                    value={summaryBy.name}
+                    onChange={(v) => v && setViewParam("group", v)}
+                    allowDeselect={false}
+                    w={{ base: "100%", sm: 200 }}
+                  />
+                  <Select
+                    aria-label="Show"
+                    data={summaryShows}
+                    value={summaryShow}
+                    onChange={(v) => setViewParam("show", v && v !== "count" ? v : null)}
+                    allowDeselect={false}
+                    w={{ base: "100%", sm: 220 }}
+                  />
+                </>
+              )}
               {filterFields.length > 0 && (
                 <FilterBar fields={filterFields} value={url.filters} onChange={(filters) => setUrl({ filters })} />
               )}
@@ -653,6 +697,18 @@ export default function RecordListPage() {
             )}
             {schema && view === "calendar" && dateColumn && (
               <CalendarView table={table} schema={schema} dateColumn={dateColumn} search={url.search} filters={url.filters} />
+            )}
+            {schema && view === "summary" && summaryBy && (
+              <SummaryView
+                table={table}
+                groupBy={summaryBy}
+                show={summaryShow}
+                search={url.search}
+                filters={url.filters}
+                chart={params.get("chart")}
+                onChartChange={(kind) => setViewParam("chart", kind)}
+                onOpenGroup={openGroup}
+              />
             )}
             {schema && view === "sheet" && (
               <Suspense fallback={<Loader size="sm" />}>

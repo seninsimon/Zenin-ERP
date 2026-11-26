@@ -49,6 +49,8 @@ export const normalizeOptions = (input: unknown): ChoiceOption[] => {
     const option: ChoiceOption = { id: item.id ? String(item.id).slice(0, 40) : randomUUID().slice(0, 8), label, color };
     // an approval step: only these roles may choose it
     if (Array.isArray(item.roles) && item.roles.length) option.roles = [...new Set(item.roles.map(String))].slice(0, 50);
+    // "Lock the record at this status"
+    if (item.locks === true) option.locks = true;
     options.push(option);
     if (color) used.add(color);
   }

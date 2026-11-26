@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ActionIcon,
   Button,
+  Checkbox,
   ColorSwatch,
   Group,
   Input,
@@ -61,26 +62,41 @@ function ColorPicker({ value, onChange, label }: { value: string; onChange: (c: 
   );
 }
 
-// "Who can choose this": an approval step (e.g. only managers can set Approved)
-function WhoCanChoose({ label, value, onChange }: { label: string; value: string[]; onChange: (roles: string[]) => void }) {
+// An option's approval settings: "Who can choose this" (an approval step,
+// e.g. only managers can set Approved) and "Lock the record at this status"
+function WhoCanChoose({
+  label,
+  value,
+  onChange,
+  locks,
+  onLocksChange,
+}: {
+  label: string;
+  value: string[];
+  onChange: (roles: string[]) => void;
+  locks: boolean;
+  onLocksChange: (locks: boolean) => void;
+}) {
   const { data: roles = [] } = useRoles();
   const [opened, setOpened] = useState(false);
   const limited = value.length > 0;
+  const tip = [limited ? "Only some levels can choose it" : "", locks ? "Locks the record" : ""].filter(Boolean).join(" · ") || "Who can choose this, and locking";
   return (
-    <Popover opened={opened} onChange={setOpened} position="bottom-end" width={280} shadow="md" withinPortal={false}>
+    <Popover opened={opened} onChange={setOpened} position="bottom-end" width={300} shadow="md" withinPortal={false}>
       <Popover.Target>
-        <Tooltip label={limited ? "Only some levels can choose it" : "Who can choose this"}>
+        <Tooltip label={tip}>
           <ActionIcon
-            variant={limited ? "light" : "subtle"}
-            color={limited ? undefined : "gray"}
-            aria-label={`Who can choose ${label || "this option"}`}
+            variant={limited || locks ? "light" : "subtle"}
+            color={locks ? "orange" : limited ? undefined : "gray"}
+            aria-label={`Who can choose ${label || "this option"}, and locking`}
             onClick={() => setOpened((o) => !o)}
           >
-            {limited ? <IconLock size={16} /> : <IconLockOpen size={16} />}
+            {limited || locks ? <IconLock size={16} /> : <IconLockOpen size={16} />}
           </ActionIcon>
         </Tooltip>
       </Popover.Target>
       <Popover.Dropdown>
+        <Stack gap="md">
         <MultiSelect
           label={
             <WithHelp topic="whoCanChoose" withinPortal={false}>
@@ -96,6 +112,17 @@ function WhoCanChoose({ label, value, onChange }: { label: string; value: string
           comboboxProps={{ withinPortal: false }}
           clearable
         />
+        <Checkbox
+          label={
+            <WithHelp topic="lockRecord" withinPortal={false}>
+              Lock the record at this status
+            </WithHelp>
+          }
+          description="Nobody can change or delete it then. Managers of the app can reopen it."
+          checked={locks}
+          onChange={(e) => onLocksChange(e.currentTarget.checked)}
+        />
+        </Stack>
       </Popover.Dropdown>
     </Popover>
   );
@@ -196,6 +223,8 @@ export function ChoiceOptionsEditor({
               label={option.label}
               value={option.roles ?? []}
               onChange={(roles) => update(index, { roles: roles.length ? roles : undefined })}
+              locks={Boolean(option.locks)}
+              onLocksChange={(locks) => update(index, { locks: locks || undefined })}
             />
             <Tooltip label="Remove">
               <ActionIcon

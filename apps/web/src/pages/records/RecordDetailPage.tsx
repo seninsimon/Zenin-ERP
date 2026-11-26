@@ -48,6 +48,7 @@ import {
 } from "../../features/records/schema";
 import { useAppCrumb } from "../../features/apps/appMenu";
 import { LiveChangeBar } from "../../features/live/LiveChangeBar";
+import { LockedBanner, type RecordLock } from "../../features/records/LockedBanner";
 import { useLiveChanges } from "../../features/live/live";
 
 function DetailValue({
@@ -112,6 +113,8 @@ export default function RecordDetailPage() {
   const perms = schema?.permissions ?? {};
   const name = recordTitle(columns, record);
   const loading = !schema || !record;
+  // locked at a status ("Paid"): no Edit or Delete, a banner says why
+  const lock = (record?._locked as RecordLock | null | undefined) ?? null;
 
   const duplicate = () => {
     if (!record) return;
@@ -242,7 +245,7 @@ export default function RecordDetailPage() {
                   History
                 </Button>
               )}
-              {(perms.create || perms.delete) && (
+              {(perms.create || (perms.delete && !lock)) && (
                 <Menu position="bottom-end">
                   <Menu.Target>
                     <ActionIcon variant="default" size="lg" aria-label="More actions">
@@ -255,7 +258,7 @@ export default function RecordDetailPage() {
                         Duplicate
                       </Menu.Item>
                     )}
-                    {perms.delete && (
+                    {perms.delete && !lock && (
                       <>
                         {perms.create && <Menu.Divider />}
                         <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={askDelete}>
@@ -266,7 +269,7 @@ export default function RecordDetailPage() {
                   </Menu.Dropdown>
                 </Menu>
               )}
-              {perms.edit && (
+              {perms.edit && !lock && (
                 <Button component={Link} to={editRecordPath(table, id)} leftSection={<IconPencil size={16} />}>
                   Edit
                 </Button>
@@ -275,6 +278,8 @@ export default function RecordDetailPage() {
           )
         }
       />
+
+      {lock && <LockedBanner table={table} id={id} lock={lock} />}
 
       <Grid gutter="lg" align="flex-start">
         <Grid.Col span={{ base: 12, lg: 8 }}>

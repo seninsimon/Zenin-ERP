@@ -26,7 +26,7 @@ export const payroll: AppBlueprint = {
         num("deductions", "Deductions"),
         formula("gross", "Gross pay", "{basic} + {allowances} + {bonus}"),
         formula("net", "Net pay", "{gross} - {deductions}", { indexed: true }),
-        choice("status", "Status", [["Draft", "gray"], ["Approved", "blue"], ["Paid", "green"]], { default: "Draft", onlyManagers: ["Approved", "Paid"] }),
+        choice("status", "Status", [["Draft", "gray"], ["Approved", "blue"], ["Paid", "green"]], { default: "Draft", onlyManagers: ["Approved", "Paid"], lockAt: ["Paid"] }),
         date("paid_on", "Paid on"),
       ],
     },

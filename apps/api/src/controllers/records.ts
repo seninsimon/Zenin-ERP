@@ -28,6 +28,7 @@ import { withDefaults } from "../schema/defaults.js";
 import { applyFormulas } from "../schema/formula.js";
 import { refreshParents } from "../schema/rollups.js";
 import { afterSave } from "../schema/automations.js";
+import { assertNotLocked, canReopen, lockedError, lockOf, ownLock, reopenTargets } from "../schema/locks.js";
 import { deleteChildren, readBack, saveChildren } from "./lineItems.js";
 
 // ?preview=1 on create/update: do the whole save, read back what the server
@@ -272,6 +273,9 @@ export async function listForUser(user: CurrentUser, schema: TableSchema, q: Lis
       } else out[column.name] = value ?? null;
     }
     if (q.withRaw) out._raw = Object.fromEntries(columns.map((c) => [c.name, row.data[c.name] ?? null]));
+    // locked at a status ("Paid"): read-only in the Spreadsheet
+    const lock = ownLock(schema, row.data);
+    if (lock) out._locked = lock.option.label;
     if (withDepartment) {
       out._department = visibleToNames(schema, row) ?? "Admins only";
       out._departmentId = row.departmentId;
@@ -332,6 +336,7 @@ export async function getHandler(req: Request, res: Response) {
   const record = await getRecord(schema.tableName, param(req, "id"), recordScope(user, schema));
   if (!record) throw new HttpError(404, "Record not found");
   const creator = record.createdBy ? await getUserOptionsByIds([record.createdBy]) : new Map();
+  const lock = await lockOf(schema, record.data);
   res.json({
     _id: record._id,
     ...withoutHidden(record.data, hiddenColumns(user, schema)),
@@ -342,6 +347,17 @@ export async function getHandler(req: Request, res: Response) {
     _createdById: record.createdBy ?? null,
     _createdAt: record.createdAt,
     _updatedAt: record.updatedAt,
+    // locked at a status: what locks it, and whether you may reopen it
+    _locked: lock
+      ? {
+          column: lock.column.name,
+          label: lock.column.label || lock.column.name,
+          status: lock.option.label,
+          parent: lock.parent ?? null,
+          canReopen: !lock.parent && canReopen(user, schema),
+          reopenTo: lock.parent ? [] : reopenTargets(lock.column),
+        }
+      : null,
   });
 }
 
@@ -358,6 +374,9 @@ export async function bulkDeleteHandler(req: Request, res: Response) {
     for (const id of ids) {
       const record = await deleteRecord(schema.tableName, id, recordScope(user, schema), client);
       if (!record) continue;
+      // a locked record stops it all (nothing is deleted): untick it first
+      const lock = await lockOf(schema, record.data, client);
+      if (lock) throw new HttpError(409, `Nothing was deleted: ${pickTitle(schema, record.data)} is locked (${lock.option.label}). Untick locked records first.`, { _locked: lock.option.label });
       await emitChange(schema.tableName, id, user, client, true);
       removed.push(record);
       await audit(
@@ -425,6 +444,7 @@ export async function bulkUpdateHandler(req: Request, res: Response) {
       await withTransaction(async (client) => {
         const current = await lockRecord(schema.tableName, id, recordScope(user, schema), client);
         if (!current) throw new HttpError(404, "Not found, or you can't edit it");
+        await assertNotLocked(schema, current.data, values, client);
         const own = { ...values };
         await fillFromUsers(schema, own, current.data);
         await keepItYours(schema, own, current.data, user);
@@ -482,6 +502,7 @@ export async function createHandler(req: Request, res: Response) {
   throwIfErrors(await checkRelations(user, schema, values));
 
   const id = await previewOrSave(req, res, () => withTransaction(async (client) => {
+    await assertNotLocked(schema, null, values, client); // a line added to a locked invoice
     await assignAutonumbers(schema, [values], client);
     const newId = await insertRecord(schema.tableName, values, departments, user._id, client);
     await applyFormulas(schema, [newId], client);
@@ -542,6 +563,8 @@ export async function updateHandler(req: Request, res: Response) {
   const saved = await previewOrSave(req, res, () => withTransaction(async (client) => {
     const current = await lockRecord(schema.tableName, id, recordScope(user, schema), client);
     if (!current) throw new HttpError(404, "Record not found");
+    // locked at a status ("Paid"), or a line of a locked record
+    await assertNotLocked(schema, current.data, values, client);
     // someone else saved it after this form was opened: ask before overwriting
     if (!preview && typeof expectedUpdatedAt === "string" && current.updatedAt && new Date(expectedUpdatedAt).getTime() !== current.updatedAt.getTime()) {
       const by = await lastEditor(schema.tableName, id, client);
@@ -613,6 +636,9 @@ export async function deleteHandler(req: Request, res: Response) {
   const deleted = await withTransaction(async (client) => {
     const record = await deleteRecord(schema.tableName, id, recordScope(user, schema), client);
     if (!record) throw new HttpError(404, "Record not found");
+    // locked: refused (the transaction puts it back)
+    const lock = await lockOf(schema, record.data, client);
+    if (lock) throw lockedError(lock);
     await emitChange(schema.tableName, id, user, client, true);
     await deleteChildren(schema.tableName, [id], client); // its line items go with it
     await refreshParents(schema.tableName, [record.data], client);
@@ -637,6 +663,46 @@ export async function deleteHandler(req: Request, res: Response) {
     schema.columns.filter((c) => FILE_COLUMN_TYPES.includes(c.type)).flatMap((c) => fileUrls(deleted.data[c.name]))
   );
   res.json({ message: "Deleted successfully", result: { acknowledged: true, deletedCount: 1 } });
+}
+
+// a record's name for messages: its display field
+const pickTitle = (schema: TableSchema, data: RecordData) => {
+  const field = pickDisplayField(schema);
+  return field && field !== "_id" && data[field] ? `"${String(data[field])}"` : "A record";
+};
+
+// POST /table/:collection/:id/reopen { reason, to }: a locked record ("Paid")
+// back to a status that doesn't lock ("Draft"), so it can be changed again.
+// Managers of the table's app and admins; the reason goes in the audit log.
+export async function reopenHandler(req: Request, res: Response) {
+  const user = currentUser(req);
+  const schema = await loadTable(req, "view");
+  const id = param(req, "id");
+  if (!canReopen(user, schema)) throw new HttpError(403, "Only a manager of this app (or an admin) can reopen it");
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 500) : "";
+  if (!reason) throw new HttpError(400, "Say why it's reopened", { reason: "Say why" });
+
+  await withTransaction(async (client) => {
+    const current = await lockRecord(schema.tableName, id, recordScope(user, schema), client);
+    if (!current) throw new HttpError(404, "Record not found");
+    const lock = ownLock(schema, current.data);
+    if (!lock) throw new HttpError(400, "It isn't locked");
+    const targets = reopenTargets(lock.column);
+    const to = typeof req.body?.to === "string" && targets.includes(req.body.to) ? req.body.to : null;
+    if (!to) throw new HttpError(400, `Choose the status it goes back to: ${targets.join(", ") || "add one that doesn't lock"}`, { to: "Choose one" });
+    const values: RecordData = { [lock.column.name]: lock.column.multiple ? [to] : to };
+    const merged: RecordData = { ...current.data, ...values };
+    await updateRecord(schema.tableName, id, values, { scope: ALL_RECORDS }, client);
+    await applyFormulas(schema, [id], client);
+    await refreshParents(schema.tableName, [current.data, merged], client);
+    await afterSave(schema, id, current.data, merged, current.createdBy ?? null, user, client);
+    await audit(
+      req,
+      { action: "reopen", entity: "record", tableName: schema.tableName, recordId: id, changes: { ...diffRecord(current.data, merged), _reason: { to: reason } } },
+      client
+    );
+  });
+  res.json({ message: "Reopened: it can be changed again" });
 }
 
 // Who last saved a record (from the audit log), for "Hana changed this record".

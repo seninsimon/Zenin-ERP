@@ -611,6 +611,35 @@ settings each option has a **lock** button: "Who can choose this". Apps mark
 these with `onlyManagers: [...]`, and the installer links them to the
 Manager role.
 
+### Locked records
+
+A choice option can also **lock the record** (`option.locks`; in the column
+settings, the same lock button: "Lock the record at this status"). Apps set
+them with `lockAt: [...]` in `choice()` (`src/apps/dsl.ts`): leave
+Approved/Rejected, expense claims Rejected/Reimbursed, payslips Paid,
+invoices Paid/Cancelled, clinic bills Paid, school fees Paid, purchase
+orders Received/Cancelled.
+- **One check for every save path** (`src/schema/locks.ts`):
+  `assertNotLocked()` in update, "Change a field" (skipped, with the reason),
+  and create (a line added to a locked record); `lockOf()` in delete and
+  "Delete rows" (nothing is deleted while one is locked) and in CSV import
+  (the row fails with "Locked: …"). 409 with `errors._locked`. The
+  Spreadsheet, board and API all go through these.
+- **Line items** (inline relations) are locked with their parent.
+- **Still updated:** formulas and totals from other records (a payment
+  recorded later still changes a paid invoice's balance), comments.
+  Setting a record *to* a locking status is a normal save.
+- **Reopen** (`POST /table/:t/:id/reopen { reason, to }`): admins and the
+  table's app **Managers** (`canReopen`). `to` must be an option that
+  doesn't lock. Audited as `reopen` with `_reason`. Runs automations like a
+  save.
+- **What clients get:** `GET /table/:t/:id` → `_locked: { column, label,
+  status, parent, canReopen, reopenTo }` or null; lists → `_locked: "Paid"`
+  per row.
+- **Web:** `LockedBanner` on the record page and the edit page (no form),
+  with **Reopen** (reason + status after reopening); Edit and Delete hidden;
+  in the Spreadsheet a locked row is read-only with a lock icon.
+
 ### Notifications and automations
 
 **Live updates** (`src/live/events.ts`, `features/live/` in the web app):
@@ -831,6 +860,39 @@ in the web app `features/chat/`, `pages/ChatPage.tsx` and
   Anu Thomas".
 - **Totals:** above `EXACT_COUNT_LIMIT` rows (default 50,000) the total is an
   estimate; the UI shows "~".
+
+### The Summary view (reports, part 1)
+
+A table's records grouped by one column, on the list's **Summary** view
+(`features/records/SummaryView.tsx`, `?view=summary&group=stage&show=sum:amount`).
+- **API:** `GET /table/:t/summary?groupBy=&fn=count|sum|avg&field=&search=&filters=`
+  (`controllers/summary.ts`), worked out in the database with the list's
+  conditions (`recordConditions`: department scope, "own only", search,
+  filters).
+  - **Group by:** choice, person, department, link, Yes/No, or a date by
+    month. A record with several values (multi-choice) counts in each.
+  - **Show:** count, or the total / average of a number, formula or total
+    column (only values that are numbers count).
+  - Hidden fields can't be grouped, added up or filtered by (400).
+  - At most 100 groups; the rest are one "N others" row. Empty values are
+    "Not set", last.
+  - **Order:** a choice's own order, dates oldest first, Yes before No,
+    otherwise biggest first.
+  - Links are named only for records the person may see ("Hidden record"
+    otherwise).
+- **Chart** (part 2, `SummaryChart.tsx`, `@mantine/charts` + recharts 2,
+  loaded only when a summary is shown): from the same numbers. Bars across
+  for names (first 30), columns for months; a **line** for months (the
+  default there); a **donut** only for a single choice or Yes/No and not for
+  averages, in the options' own colours, with colour keys in the table as
+  its legend. One series, in the app's colour. Hover shows the value;
+  clicking a bar, slice or month opens its records. `?chart=bar|line|donut`.
+- **Web:** "By …" and "Show" selects, the search and filters of the list,
+  the chart, then one row per group and an "All" total row. Clicking a group opens
+  the Table view filtered to it (`groupFilter()` in `summary.ts`; Back
+  returns to the summary). Numbers follow live changes.
+- Plan: `workspace/REPORTS_PLAN.md` (part 2 charts, part 3 saved reports on
+  Home).
 
 ### The Spreadsheet view
 

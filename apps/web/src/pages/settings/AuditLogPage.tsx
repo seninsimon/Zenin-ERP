@@ -42,6 +42,7 @@ const ACTIONS = [
   "create",
   "update",
   "delete",
+  "reopen",
   "import",
   "login",
   "login_failed",

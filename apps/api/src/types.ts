@@ -36,6 +36,8 @@ export interface ChoiceOption {
   color: string;
   // only these roles (ids) may choose it, e.g. "Approved" (admins always may)
   roles?: string[];
+  // the record is locked at this status (schema/locks.ts)
+  locks?: boolean;
 }
 
 export type RollupFn = "count" | "sum" | "avg" | "min" | "max";

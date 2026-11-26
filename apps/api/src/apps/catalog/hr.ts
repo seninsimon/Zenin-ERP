@@ -24,7 +24,7 @@ export const hr: AppBlueprint = {
         date("to", "To", { required: true, default: "today" }),
         formula("days", "Days", "DAYS({to}, {from}) + 1"),
         // approving is for managers
-        choice("status", "Status", [["Pending", "orange"], ["Approved", "green"], ["Rejected", "red"]], { default: "Pending", onlyManagers: ["Approved", "Rejected"] }),
+        choice("status", "Status", [["Pending", "orange"], ["Approved", "green"], ["Rejected", "red"]], { default: "Pending", onlyManagers: ["Approved", "Rejected"], lockAt: ["Approved", "Rejected"] }),
         longText("reason", "Reason", { showInTable: false }),
       ],
     },

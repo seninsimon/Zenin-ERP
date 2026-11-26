@@ -86,7 +86,7 @@ export const clinic: AppBlueprint = {
         rollup("total", "Total", { from: "bill_lines", via: "bill", fn: "sum", field: "amount" }),
         num("paid", "Paid"),
         formula("balance", "Balance", "{total} - {paid}"),
-        choice("status", "Status", [["Unpaid", "orange"], ["Paid", "green"]], { default: "Unpaid" }),
+        choice("status", "Status", [["Unpaid", "orange"], ["Paid", "green"]], { default: "Unpaid", lockAt: ["Paid"] }),
       ],
     },
     {

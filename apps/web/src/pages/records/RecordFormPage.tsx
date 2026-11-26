@@ -35,6 +35,7 @@ import { LiveChangeBar } from "../../features/live/LiveChangeBar";
 import { useLiveChanges } from "../../features/live/live";
 import { modals } from "@mantine/modals";
 import { WithHelp } from "../../components/ui/HelpTip";
+import { LockedBanner, type RecordLock } from "../../features/records/LockedBanner";
 
 type Values = Record<string, unknown>;
 type Snapshot = { values: Values; departmentIds: string[]; files: Record<string, string[]> };
@@ -325,6 +326,8 @@ export default function RecordFormPage() {
   const ownFields = new Map((schema?.ownFields ?? []).map((o) => [o.column, o]));
   const notListed = (schema?.ownFields ?? []).find((o) => o.missing)?.missing;
   const noPermission = schema && !(editing ? schema.permissions?.edit : schema.permissions?.create);
+  // locked at a status ("Paid"): no form, the banner says why (and offers Reopen)
+  const lock = editing ? ((record?._locked as RecordLock | null | undefined) ?? null) : null;
 
 
   const breadcrumbs = [
@@ -340,7 +343,9 @@ export default function RecordFormPage() {
         description={editing ? undefined : "Fill in the details below. Fields marked * are required."}
       />
 
-      {noPermission ? (
+      {lock ? (
+        <LockedBanner table={table} id={id!} lock={lock} />
+      ) : noPermission ? (
         <Text c="dimmed">You don't have permission to {editing ? "edit records in" : "add records to"} this table.</Text>
       ) : (
         <form

@@ -19,6 +19,8 @@ export interface DataTableColumn<T> {
   hideable?: boolean;
   // role in the mobile card layout
   mobile?: "title" | "subtitle" | "field" | "hidden";
+  // phone cards leave the field out when this says it's empty
+  isEmpty?: (row: T) => boolean;
 }
 
 export interface SortState {

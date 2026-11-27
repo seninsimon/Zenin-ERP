@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { login, unique } from "./helpers.js";
 
-// The Spreadsheet view (workspace/SPREADSHEET_PLAN.md): a switch per table,
+// The Spreadsheet view (docs/WORKFLOW.md): a switch per table,
 // rows with their stored values, and each cell's "changed meanwhile" check.
 describe("Spreadsheet view", async () => {
   const admin = await login();

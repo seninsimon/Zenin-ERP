@@ -24,11 +24,9 @@ export type ColumnLike = {
   rollup?: { type?: string };
 };
 
-export const EMPTY = (
-  <Text span c="dimmed" aria-label="empty">
-    —
-  </Text>
-);
+// an empty field shows nothing (no dash): the label above or the column
+// header already says what it is
+export const EMPTY = null;
 
 export function FieldValue({
   column,

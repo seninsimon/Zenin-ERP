@@ -5,7 +5,7 @@ import { getRecord } from "../repo/recordRepo.js";
 import type { ChoiceOption, Column, CurrentUser, RecordData, TableSchema } from "../types.js";
 import { getSchema } from "./schemaRepo.js";
 
-// Locked records (workspace/RECORD_LOCK_PLAN.md): a choice option can lock
+// Locked records (docs/WORKFLOW.md): a choice option can lock
 // the record ("Approved", "Paid"). A locked record can't be changed or
 // deleted by anyone, through any screen or the API, until a Manager of its
 // app (or an admin) reopens it. Its line items are locked with it. What the

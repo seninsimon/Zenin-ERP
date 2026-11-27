@@ -3,7 +3,7 @@ import { login, unique } from "./helpers.js";
 
 type Board = { app: string; launcher: string; reports: { id: string; name: string; table: string; groupBy: string; show: string; chart: string | null; problem?: string }[] };
 
-// Reports (workspace/REPORTS_PLAN.md, part 3): saved summaries in their app's
+// Reports (docs/WORKFLOW.md): saved summaries in their app's
 // block on Home. Admins pin them; apps bring ready-made ones.
 describe("Reports on Home", async () => {
   const admin = await login();

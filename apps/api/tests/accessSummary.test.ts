@@ -3,7 +3,7 @@ import { login, unique } from "./helpers.js";
 
 // "What they can do" (GET /users/:id/access) and "Who can use this table"
 // (GET /schema/:table/access): plain answers for admins, from the same rules
-// the server enforces. workspace/ACCESS_PLAN.md part 2.
+// the server enforces. See docs/WORKFLOW.md.
 describe("Access summaries", async () => {
   const admin = await login();
   const dept = async (name: string) => (await admin.post("/api/departments", { name: unique(name) })).body.department;

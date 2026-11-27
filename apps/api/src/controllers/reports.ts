@@ -11,7 +11,7 @@ import { getSchema } from "../schema/schemaRepo.js";
 import type { CurrentUser, TableSchema } from "../types.js";
 import { GROUP_TYPES, NUMBER_TYPES } from "./summary.js";
 
-// Reports (workspace/REPORTS_PLAN.md, part 3): a saved summary, shown in its
+// Reports (docs/WORKFLOW.md): a saved summary, shown in its
 // app's block on Home and on the app's page. Admins pin them from the Summary
 // view; apps bring a ready-made one. Everyone who can see the table sees the
 // report, counting only the records they may see (the numbers come from

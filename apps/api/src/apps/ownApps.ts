@@ -7,7 +7,7 @@ import type { Permissions } from "../types.js";
 import { APP_BY_KEY, launcherApp, MY_TABLES } from "./index.js";
 import type { AppBlueprint } from "./types.js";
 
-// Your own apps (workspace/ACCESS_PLAN.md part 3). Every table belongs to an
+// Your own apps (docs/WORKFLOW.md). Every table belongs to an
 // app, and every app has a Manager and a Staff role, so access is always
 // given the same way: App access on the person.
 //   - "My tables" (key my-tables): tables you built yourself. A table with

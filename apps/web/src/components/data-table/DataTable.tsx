@@ -215,13 +215,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const renderCell = (row: T, column: DataTableColumn<T>): ReactNode => {
     if (column.cell) return column.cell(row);
     const value = column.accessor ? column.accessor(row) : (row as Record<string, unknown>)[column.id];
-    return value === null || value === undefined || value === "" ? (
-      <Text span c="dimmed">
-        —
-      </Text>
-    ) : (
-      String(value)
-    );
+    // empty: nothing shown
+    return value === null || value === undefined || value === "" ? null : String(value);
   };
 
   const actionsMenu = (row: T) =>
@@ -393,9 +388,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const mobile = (() => {
     const title = visibleColumns.visible.find((c) => c.mobile === "title") ?? visibleColumns.visible[0];
     const subtitle = visibleColumns.visible.find((c) => c.mobile === "subtitle");
-    const fields = visibleColumns.visible
-      .filter((c) => c !== title && c !== subtitle && c.mobile !== "hidden")
-      .slice(0, 3);
+    const fields = visibleColumns.visible.filter((c) => c !== title && c !== subtitle && c.mobile !== "hidden");
     if (loading) {
       return (
         <Stack p="md" gap="md">
@@ -433,7 +426,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
             </Group>
             {fields.length > 0 && (
               <Stack gap={4} mt={6}>
-                {fields.map((c) => (
+                {/* up to three fields that have a value (an empty one is left out) */}
+                {fields.filter((c) => !c.isEmpty?.(row.original)).slice(0, 3).map((c) => (
                   <Group key={c.id} gap="xs" wrap="nowrap">
                     <Text size="xs" c="dimmed" w={96} style={{ flexShrink: 0 }} truncate>
                       {c.header}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { login, unique } from "./helpers.js";
 
-// Summary on any list (workspace/REPORTS_PLAN.md, part 1): records grouped by
+// Summary on any list (docs/WORKFLOW.md): records grouped by
 // one column, with a count, sum or average; same permissions as the list.
 describe("Summary on a list", async () => {
   const admin = await login();

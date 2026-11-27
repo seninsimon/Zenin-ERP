@@ -140,7 +140,7 @@ shadows in components.**
 - **Details:** two columns of cells on desktop and tablets, one on phones;
   label above value, with a hairline under each cell (`.detail-cell`).
   Long links and emails stay on one line ("…", the full value on hover).
-  **Every field is shown in its place,** empty ones with a light "—", so
+  **Every field is shown in its place,** empty ones with just the label, so
   records of a table look alike. No layout toggle. The title field isn't repeated; long text, pictures and files get
   full-width blocks.
 - **Phone numbers, emails and links are always tappable.** WhatsApp is
@@ -317,6 +317,8 @@ tables.
   - an empty table explains why and offers the next step.
 - **Phones:** rows render as **cards** showing a title, a subtitle and up to 3
   fields. Set `mobile: "title" | "subtitle" | "hidden"` on columns to control it.
+  A column with `isEmpty(row)` is left out of a card when it's empty (record
+  lists do this), so cards show only fields that have a value.
 
 ---
 
@@ -334,7 +336,7 @@ Formatting helpers live in `src/lib/format.ts`.
 | image(s) | rounded thumbnails (28 px in tables, 72 px in details) |
 | file(s) | 📄 icon + file name, opens in a new tab |
 | rich text | plain-text preview in tables; formatted in detail views |
-| empty | a dimmed "—" (never "null", "undefined" or blank) |
+| empty | nothing (never "—", "null" or "undefined") |
 | department | neutral badge |
 
 ---
@@ -436,7 +438,7 @@ Formatting helpers live in `src/lib/format.ts`.
 - **Numbers:**
   - use the formatters (`1,234`, "3 records", "~12,000");
   - pluralise correctly with `pluralize()`.
-- **Empty values:** "—". Unknown users show as "System".
+- **Empty values:** shown as nothing. Unknown users show as "System".
 
 ### Help (?)
 

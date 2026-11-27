@@ -54,7 +54,7 @@ export function LineItemsGrid({
                             <Text size="sm" ta={valueType(c) === "number" ? "right" : undefined} pt={6} className="tabular-nums">
                               {(() => {
                                 const v = live?.get(line.key)?.[c.name] ?? (line._id ? line.values[c.name] : undefined);
-                                return v === undefined ? <Text span c="dimmed">—</Text> : <FieldValue column={c} value={v} />;
+                                return v === undefined ? null : <FieldValue column={c} value={v} />;
                               })()}
                             </Text>
                           ) : (

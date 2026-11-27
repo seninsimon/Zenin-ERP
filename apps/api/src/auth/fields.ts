@@ -5,7 +5,7 @@ import { peekSchema } from "../schema/schemaRepo.js";
 import type { CurrentUser, TableSchema } from "../types.js";
 import { isAdmin } from "./access.js";
 
-// Fields some levels don't see (workspace/ACCESS_PLAN.md part 6). A column
+// Fields some levels don't see (docs/WORKFLOW.md). A column
 // with onlyLevels ("manager") is seen and changed only by people with one of
 // those levels in the table's app, and admins. This file decides it; every
 // place that shows or takes values asks here:

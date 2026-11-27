@@ -138,7 +138,7 @@ export default function RecordDetailPage() {
   const titleColumn = record ? columns.find((c) => ["text", "autonumber", "textarea"].includes(c.type) && String(record[c.name] ?? "").trim() === name) : undefined;
   const LONG = ["textarea", "richtext", "image", "images", "file", "files"];
   const fields = columns.filter((c) => c !== titleColumn);
-  // every field, always in the same place (empty ones show a light "—"),
+  // every field, always in the same place (empty ones show just the label),
   // so each record of a table looks the same and gaps are seen at a glance
   const shortFields = fields.filter((c) => !LONG.includes(c.type));
   const longFields = fields.filter((c) => LONG.includes(c.type));

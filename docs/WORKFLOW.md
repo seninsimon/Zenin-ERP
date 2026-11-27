@@ -911,7 +911,6 @@ A table's records grouped by one column, on the list's **Summary** view
     **Reports** section, and each app's page shows its own.
   - **Card** (`ReportCard.tsx`): name, total, a compact chart (at most 10
     bars); the name opens the full Summary, a bar opens its records.
-- Plan: `workspace/REPORTS_PLAN.md`.
 
 ### The Spreadsheet view
 

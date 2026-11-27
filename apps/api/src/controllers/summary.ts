@@ -14,7 +14,7 @@ import { getSchema } from "../schema/schemaRepo.js";
 import type { Column, CurrentUser, TableSchema } from "../types.js";
 import { loadTable } from "./records.js";
 
-// Summary on any list (workspace/REPORTS_PLAN.md, part 1): the records of a
+// Summary on any list (docs/WORKFLOW.md): the records of a
 // table grouped by one column, with the count and, for a number column, its
 // sum or average. Same search, filters and permissions as the list: each
 // person counts only the records they may see; hidden fields can't be used.

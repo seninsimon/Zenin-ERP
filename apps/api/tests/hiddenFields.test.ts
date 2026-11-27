@@ -4,7 +4,7 @@ import { recordDetails } from "../src/mail/render.js";
 import { getSchema } from "../src/schema/schemaRepo.js";
 import { login, unique } from "./helpers.js";
 
-// Fields some levels don't see (workspace/ACCESS_PLAN.md part 6): Salary is
+// Fields some levels don't see (docs/WORKFLOW.md): Salary is
 // for Managers. Every way a value can leave the server is tried as Staff.
 describe("Fields only some levels see", async () => {
   const admin = await login();

@@ -59,7 +59,7 @@ import { FieldValue } from "../../components/ui/FieldValue";
 import { Page, PageHeader } from "../../components/ui/Page";
 import { confirmDanger } from "../../components/ui/confirm";
 import { editRecordPath, newRecordPath, recordPath, tableTitle } from "../../layout/nav";
-import { formatDateTime, formatNumber, pluralize } from "../../lib/format";
+import { formatDateTime, formatNumber, isEmptyValue, pluralize } from "../../lib/format";
 import { readJson } from "../../lib/storage";
 import { BoardView } from "../../features/records/BoardView";
 import { CalendarView } from "../../features/records/CalendarView";
@@ -277,6 +277,7 @@ export default function RecordListPage() {
       hiddenByDefault: column !== primary && column.showInTable === false,
       hideable: column !== primary,
       mobile: column === primary ? "title" : FILE_TYPES.includes(column.type) ? "hidden" : undefined,
+      isEmpty: (row) => isEmptyValue(row[column.name]),
       cell: (row) =>
         column === primary ? (
           <Text span inherit fw={500}>

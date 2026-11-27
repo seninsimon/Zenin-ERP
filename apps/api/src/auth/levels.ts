@@ -11,7 +11,7 @@ import type { PermissionMap, Permissions, TableSchema } from "../types.js";
 import { normalizePermissions } from "./access.js";
 import { mergePermissions } from "./mergePermissions.js";
 
-// Access levels (workspace/ACCESS_PLAN.md part 4). A level is what a person
+// Access levels (docs/WORKFLOW.md). A level is what a person
 // can do in one app: Staff, Manager, or one you add ("Accountant"). People get
 // one level per app through App access. Under the hood a level is the app's
 // role of that level (roles.app_key + app_level); an app shown as one in the

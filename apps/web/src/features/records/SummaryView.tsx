@@ -23,7 +23,7 @@ import { useLiveChanges } from "../live/live";
 import { columnLabel, type RecordColumn } from "./schema";
 import classes from "./summary.module.css";
 
-// Summary on any list (workspace/REPORTS_PLAN.md, part 1): the records grouped
+// Summary on any list (docs/WORKFLOW.md): the records grouped
 // by one column, with the count or the sum / average of a number column.
 // Worked out by the server (GET /table/:t/summary), with the list's search,
 // filters and the person's permissions. Click a group to see its records.

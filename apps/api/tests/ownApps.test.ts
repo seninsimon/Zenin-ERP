@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { login, unique } from "./helpers.js";
 
-// Every table belongs to an app: "My tables", or an app you make (workspace/
-// ACCESS_PLAN.md part 3). Each has a Manager (everything) and a Staff role.
+// Every table belongs to an app: "My tables", or an app you make (see
+// docs/WORKFLOW.md). Each has a Manager (everything) and a Staff role.
 describe("Apps you make, and every table in an app", async () => {
   const admin = await login();
   type Home = { key: string; name: string; icon: string; own: boolean };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { login, unique } from "./helpers.js";
 
-// Access levels (workspace/ACCESS_PLAN.md part 4): each app's Staff, Manager
+// Access levels (docs/WORKFLOW.md): each app's Staff, Manager
 // and added levels, and moving older roles (roles of no app) to levels,
 // exactly: every person can do what they could before, or nothing changes.
 describe("Access levels", async () => {

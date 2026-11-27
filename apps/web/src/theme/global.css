@@ -67,3 +67,8 @@ body {
   border-bottom: 1px solid var(--app-border);
   min-width: 0;
 }
+
+/* an empty value shows nothing: keep its line, so neighbouring cells line up */
+.detail-cell > dd {
+  min-height: 1.55em;
+}

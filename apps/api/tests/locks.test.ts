@@ -3,7 +3,7 @@ import { drainJobs } from "../src/jobs/worker.js";
 import { query } from "../src/db/pool.js";
 import { login, unique } from "./helpers.js";
 
-// Locked records (workspace/RECORD_LOCK_PLAN.md): a status option ("Paid")
+// Locked records (docs/WORKFLOW.md): a status option ("Paid")
 // that locks the record against every kind of change until a Manager reopens it.
 describe("Locked records", async () => {
   const admin = await login();

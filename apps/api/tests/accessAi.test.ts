@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { login, unique } from "./helpers.js";
 
-// Change access with AI (workspace/ACCESS_PLAN.md part 5). The AI is never
+// Change access with AI (docs/WORKFLOW.md). The AI is never
 // really called: fetch gives scripted Gemini answers, one per round.
 type Call = { url: string; body: Record<string, unknown> };
 const calls: Call[] = [];

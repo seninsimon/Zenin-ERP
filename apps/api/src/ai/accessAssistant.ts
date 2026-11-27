@@ -15,7 +15,7 @@ import { checkLimits } from "./usage.js";
 import { cleanTurns } from "./assistant.js";
 import { chatWithTools, type ToolDef, type ToolResult } from "./toolChat.js";
 
-// Change access with AI (workspace/ACCESS_PLAN.md part 5), for admins. The
+// Change access with AI (docs/WORKFLOW.md), for admins. The
 // admin says what they want ("let Senin edit leave requests"); the AI looks
 // things up with read-only tools and suggests changes. A suggestion is worked
 // out here, in memory, with the same rules that decide access, so the

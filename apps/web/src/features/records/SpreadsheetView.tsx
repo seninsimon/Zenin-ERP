@@ -21,13 +21,13 @@ import { newLookupCache, parseClipboard, PasteProblem, pastedValue } from "./pas
 import { columnLabel, FILE_TYPES, type RecordColumn, type TableSchemaInfo } from "./schema";
 import classes from "./spreadsheet.module.css";
 
-// The Spreadsheet view (workspace/SPREADSHEET_PLAN.md): the table's records as
+// The Spreadsheet view (docs/WORKFLOW.md): the table's records as
 // a grid. Click a cell and type; each cell saves on its own through the normal
 // save (same checks, same history), telling the server the value it started
 // from, so a change someone made meanwhile is never overwritten. Paste a block
 // from Excel or Google Sheets. Others' changes come in live. Ctrl+Z (or Undo
 // in the message) puts the last change back, cell by cell, only where nobody
-// changed the cell since (workspace/SHEET_UNDO_PLAN.md).
+// changed the cell since (docs/WORKFLOW.md).
 
 const PAGE = 100;
 const MAX_PASTE_ROWS = 200;

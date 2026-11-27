@@ -18,8 +18,9 @@ import { pruneSessions } from "../repo/userRepo.js";
 import { storage } from "../storage.js";
 import { runExport } from "./exportJob.js";
 import { runImport } from "./importJob.js";
+import { runMigration } from "../migration/run.js";
 
-const HANDLERS = { export: runExport, import: runImport } as const;
+const HANDLERS = { export: runExport, import: runImport, migration: runMigration } as const;
 const POLL_MS = 5_000;
 const HOUSEKEEPING_MS = 10 * 60_000;
 const MAIL_MS = 5_000;

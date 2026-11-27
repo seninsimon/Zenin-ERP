@@ -978,6 +978,49 @@ appear. Phones don't get it (`?view=sheet` falls back to the list).
   While the live stream is held back (`useLiveHeldBack`, e.g. the Quick
   Tunnel), the sheet checks every 5 s.
 
+### Bring your data (data migration)
+
+Administration → **Bring your data** (`MigrationPage.tsx`,
+`controllers/migration.ts`, `src/migration/`). Admins only; **off by
+default** (`app_state` "migration"): while off, every request but the switch
+is refused (403), because it takes large uploads.
+
+1. **Upload** (`POST /migration/upload`, multipart `files`, up to 20 MB in
+   all, 20 files): an Excel workbook (`.xlsx`, each sheet a table, read with
+   `exceljs`) or CSV files (each file a table; comma, semicolon or tab). The
+   files are kept in storage under `migrations/<id>/`.
+2. **The plan** (`analyze.ts`, `makePlan`), saved on the `migrations` row
+   (migration 021) with status `review`:
+   - the header is the first non-empty row; blank headers become "Column N";
+   - **types:** Yes/No (two words), number ("1,20,000.50", "₹ 1,200"), date
+     (day first, e.g. 03/04/2026, unless the data shows month first; also
+     2026-04-03 and "3 Apr 2026"), choice (≤ 12 values that repeat), long
+     text, text. A type needs 90% of the values to fit. **Phone numbers,
+     PIN codes, IDs and account numbers stay text** (by header, a leading 0
+     or +, or 10+ digits), so they're never added up;
+   - **links:** a column whose values are ≥ 90% found in another table's
+     identifying column (all values present and different); a table's own
+     key (first such column) isn't a link; no loops between tables.
+3. **Review** (`PUT /migration/:id/plan`): leave tables or columns out,
+   rename tables, change labels and types (counts are worked out again from
+   the files; a link can be removed but not invented).
+4. **Import** (`POST /migration/:id/import`): a background job of type
+   `migration` (`run.ts`; not listed in Imports & exports). It makes **an
+   app named after the file** with one table per sheet (by department: no;
+   Staff: no access until given), linked-to tables first, rows in batches of
+   500, links by the target's identifying column. **A value that doesn't
+   fit is left empty and listed; the row is always imported.** If anything
+   fails, everything it made is removed again (never half an import).
+5. **Proof** (`result`): rows in the file vs rows counted in the database,
+   and each number column's total in the file vs `sum()` in the database;
+   `allMatch`. The values that didn't fit: `GET /migration/:id/problems`
+   (CSV: table, row in file, column, value, problem).
+6. **Remove** (`DELETE /migration/:id`): a review is forgotten; an import's
+   tables, records and app are deleted (to try again).
+
+Not yet: database dumps (`.sql`) and the AI report for stored procedures,
+functions and triggers (`workspace/MIGRATION_PLAN.md`, parts 2 and 3).
+
 ### Changing many records at once (bulk update)
 
 - **On a list:** select rows → **Update** → choose a field → give the value
@@ -1269,11 +1312,19 @@ Both repos run CI on every push and pull request
   service) → `pnpm build` → `docker build`
 - **Web:** install → `pnpm lint` → `pnpm build`
 
+**Versions and branch names** (from v0.10):
+- `v0.x` until the first paying customer; **v1.0 = ready for real
+  customers**. The version is in both `package.json` files.
+- One branch per piece of work, named `v<version>-<use-case>`:
+  `v0.10-data-migration`; a fix: `v0.10.1-fix-import-dates`.
+- Merged into `main` when CI is green, then tagged: `v0.10.0`.
+- Everything up to the `people-import` branch is v0.9.
+
 Suggested flow:
-1. Branch from `main`.
+1. Branch from the latest work, named as above.
 2. Make small commits.
-3. Open a PR into `development` (or `main`).
-4. Merge only when CI is green.
+3. Open a PR into `main`.
+4. Merge only when CI is green, then tag the version.
 
 ### The inner loop
 

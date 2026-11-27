@@ -298,6 +298,13 @@ tables.
   Status is Paid", what it means, **Reopen** for those who may); the
   actions that can't work (Edit, Delete) are hidden, not shown disabled.
   Reopen always asks why.
+- **Review before saving** (Bring your data): one card per table to be
+  made, one row per field (tick, name, type, an example, and an orange line
+  for values that won't fit). Changing a type is checked at once; nothing
+  is saved until the main button ("Import 22 rows into 2 tables").
+- **Proof after a big change:** a green box that says what was checked
+  ("every row is here, every total matches"), then a small table of the
+  numbers, and the problems as a download.
 - **Shown once** (temporary passwords): a yellow box, **Download** button, and
   closing without downloading asks first.
 - **Alignment:**

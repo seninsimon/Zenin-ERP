@@ -175,6 +175,18 @@ Restart `pnpm dev` after a reset or a `.env` change.
 
 ---
 
+## 6b. Versions and branches
+
+```bash
+git switch -c v0.11-printing          # new work: v<version>-<use-case>
+git switch -c v0.10.1-fix-import-dates  # a fix to v0.10
+# after merging into main (CI green):
+git tag v0.10.0 && git push origin v0.10.0
+```
+
+`v0.x` until the first paying customer; `v1.0` = ready for real customers.
+Update `"version"` in `apps/api/package.json` and `apps/web/package.json`.
+
 ## 7. Tests and checks
 
 Run these before saying a change is done.
@@ -217,6 +229,7 @@ These are set in the ERP, under **Administration**. No `.env` editing.
 | Lock records at a status (e.g. nobody changes a leave once Approved) | **Tables & columns** → the table → the status column → the lock button next to the option → **Lock the record at this status**. Managers of the app reopen a locked record from its page (**Reopen**) |
 | See totals: records by status, person or month; total or average of an amount | Open the table → **Summary** (next to Table, Board…). Choose "By …" and "Show"; click a row to see its records |
 | Put a report on Home (e.g. "Sales by month") | Open the table → **Summary** → choose "By …", "Show" and the chart → **Pin to Home**. Rename or remove it from its card's **⋯** on Home |
+| Move data in from Excel, CSV or another system | **Bring your data**: switch it on, upload an Excel workbook or CSV files, check the tables and types, **Import**. The page proves nothing was lost and lists any values that didn't fit. **Remove this import** undoes it. Switch it off when you're done |
 | Turn the Spreadsheet view off for a table (it's on for every table; e.g. off for Payslips) | **Tables & columns** → the table → Access → **Spreadsheet view** |
 | Apps (HR, Projects, Clinic…), or your own (**New app**) | **Manage apps**. A new table asks which app it goes in |
 | ERP name and logo | **Branding** (everyone sets their own picture in **My profile**) |

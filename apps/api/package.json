@@ -1,6 +1,6 @@
 {
   "name": "generic-erp-api",
-  "version": "1.0.0",
+  "version": "0.10.0",
   "description": "Generic ERP API (Express + PostgreSQL)",
   "type": "module",
   "scripts": {
@@ -31,6 +31,7 @@
     "csv-parse": "^7.0.3",
     "csv-stringify": "^6.9.0",
     "dotenv": "^17.4.2",
+    "exceljs": "4.4.0",
     "express": "^5.3.0",
     "helmet": "^8.3.0",
     "nodemailer": "^10.6.1",
@@ -57,5 +58,10 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "pnpm": {
+    "overrides": {
+      "uuid": "^11.1.1"
+    }
   }
 }

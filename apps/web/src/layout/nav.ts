@@ -2,6 +2,7 @@ import {
   IconApps,
   IconBuilding,
   IconDatabaseCog,
+  IconDatabaseImport,
   IconHistory,
   IconHome,
   IconMail,
@@ -33,6 +34,7 @@ export const ADMIN_NAV: NavItem[] = [
   { label: "Chat", to: "/settings/chat", icon: IconMessages, description: "Team chat and comments on records" },
   { label: "Access levels", to: "/settings/roles", icon: IconShieldLock, description: "What Staff, Managers and other levels can do in each app" },
   { label: "Departments", to: "/settings/departments", icon: IconBuilding, description: "Who sees which data" },
+  { label: "Bring your data", to: "/settings/migration", icon: IconDatabaseImport, description: "Move data in from Excel, CSV or another system" },
   { label: "Audit log", to: "/settings/audit", icon: IconHistory, description: "Who changed what, when" },
 ];
 

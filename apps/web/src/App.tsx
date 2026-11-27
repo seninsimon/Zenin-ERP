@@ -26,6 +26,7 @@ const UsersPage = lazy(() => import("./pages/settings/UsersPage"));
 const AccessLevelsPage = lazy(() => import("./pages/settings/AccessLevelsPage"));
 const DepartmentsPage = lazy(() => import("./pages/settings/DepartmentsPage"));
 const AuditLogPage = lazy(() => import("./pages/settings/AuditLogPage"));
+const MigrationPage = lazy(() => import("./pages/settings/MigrationPage"));
 const AppsPage = lazy(() => import("./pages/settings/AppsPage"));
 const EmailSettingsPage = lazy(() => import("./pages/settings/EmailSettingsPage"));
 const BrandingPage = lazy(() => import("./pages/settings/BrandingPage"));
@@ -93,6 +94,7 @@ export default function App() {
                   <Route path="settings/roles" element={<AdminOnly><AccessLevelsPage /></AdminOnly>} />
                   <Route path="settings/departments" element={<AdminOnly><DepartmentsPage /></AdminOnly>} />
                   <Route path="settings/audit" element={<AdminOnly><AuditLogPage /></AdminOnly>} />
+                  <Route path="settings/migration" element={<AdminOnly><MigrationPage /></AdminOnly>} />
 
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>

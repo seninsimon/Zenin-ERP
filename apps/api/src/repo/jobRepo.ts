@@ -3,7 +3,7 @@ import { query } from "../db/pool.js";
 // Background jobs (CSV import/export). The worker claims queued jobs with
 // FOR UPDATE SKIP LOCKED, so several workers can run safely.
 
-export type JobType = "export" | "import";
+export type JobType = "export" | "import" | "migration";
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
 export interface JobResult {
@@ -143,11 +143,12 @@ export async function listJobs(opts: { userId: string | null; page: number; limi
     where = `WHERE user_id = $1`;
   }
   const [{ rows }, { rows: count }] = await Promise.all([
+    // "Bring your data" imports show on their own page, not in Imports & exports
     query<JobRow>(
-      `SELECT * FROM jobs ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      `SELECT * FROM jobs ${where ? `${where} AND` : "WHERE"} type <> 'migration' ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, opts.limit, (opts.page - 1) * opts.limit]
     ),
-    query<{ total: number }>(`SELECT count(*)::int AS total FROM jobs ${where}`, params),
+    query<{ total: number }>(`SELECT count(*)::int AS total FROM jobs ${where ? `${where} AND` : "WHERE"} type <> 'migration'`, params),
   ]);
   return { data: rows.map((r) => publicJob(toJob(r))), total: count[0].total, page: opts.page, limit: opts.limit };
 }

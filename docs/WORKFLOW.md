@@ -1021,8 +1021,10 @@ is refused (403), because it takes large uploads.
 **Database dumps** (`.sql`, part 2; `sqlDump.ts`): plain dumps from
 mysqldump, pg_dump (plain format) or SQL Server "Generate Scripts" with data.
 - `splitStatements` splits on the delimiter outside quotes, comments and
-  `$$` bodies, follows MySQL's `DELIMITER` and SQL Server's `GO`, and reads
-  the data block after `COPY … FROM stdin`.
+  `$$` bodies, follows MySQL's `DELIMITER` and SQL Server's `GO`, reads
+  the data block after `COPY … FROM stdin`, and keeps the content of MySQL's
+  executable comments (`/*!50003 CREATE*/ … TRIGGER … */`: real mysqldump
+  output for triggers and views).
 - Read exactly: `CREATE TABLE` (columns, types, `NOT NULL`, inline and table
   `PRIMARY KEY` / `UNIQUE` / `FOREIGN KEY … REFERENCES`), `ALTER TABLE … ADD
   CONSTRAINT`, MySQL `enum(…)` and Postgres `CREATE TYPE … AS ENUM`; rows
@@ -1260,6 +1262,10 @@ UI button ─▶ API: create job (queued) ─▶ NOTIFY erp_jobs ─▶ worker c
             (polls every 3 s)            result, progress, file
 ```
 
+- **A worker takes only the job types it knows** (`claimNextJob(types)`):
+  export, import, migration. An older worker on the same database (a
+  deployed copy not updated yet, which shares the database with `task dev`)
+  leaves newer kinds of job for a newer worker instead of failing them.
 - **Export** (needs *view*): writes every record the user can see to
   `exports/<job>.csv`, then **Download**. The last column is the record's
   **ID**.

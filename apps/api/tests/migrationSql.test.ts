@@ -110,6 +110,21 @@ COPY public.people_${tag} (id, name, mood, active, joined) FROM stdin;
     await admin.del(`/api/migration/${m._id}`).expect(200);
   });
 
+  it("reads triggers and views the way a real mysqldump writes them", async () => {
+    const real = `CREATE TABLE \`t_${tag}\` (\`id\` int NOT NULL, \`gst_pct\` int, PRIMARY KEY (\`id\`));
+INSERT INTO \`t_${tag}\` VALUES (1,5),(2,12),(3,18),(4,5),(5,12);
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 DEFINER=\`root\`@\`localhost\`*/ /*!50003 TRIGGER \`trg_real_${tag}\` BEFORE INSERT ON \`t_${tag}\` FOR EACH ROW BEGIN SET NEW.id = NEW.id; END */;;
+DELIMITER ;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=\`root\`@\`localhost\` SQL SECURITY DEFINER */
+/*!50001 VIEW \`v_real_${tag}\` AS select 1 AS \`one\` */;`;
+    const m: Mig = (await upload(real, "real.sql").expect(201)).body;
+    expect(m.plan.logic!.map((l) => [l.kind, l.name])).toEqual([["trigger", `trg_real_${tag}`], ["view", `v_real_${tag}`]]);
+    expect(col(m.plan.tables[0], "gst_pct").type).toBe("number"); // a GST rate is a number; only a GSTIN is an ID
+    await admin.del(`/api/migration/${m._id}`).expect(200);
+  });
+
   it("the AI explains the old logic; nothing is created from it", async () => {
     const res = await upload(mysql.replace(/_\${tag}/g, `_${tag}x`).replaceAll(tag, `${tag}x`), "shop2.sql");
     const m: Mig = res.body;

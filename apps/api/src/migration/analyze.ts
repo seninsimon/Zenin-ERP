@@ -238,7 +238,7 @@ function dateOrder(values: string[]): DateOrder {
 
 // Phone numbers, PIN codes, account numbers and IDs look like numbers but are
 // never added up: text, by their header or by how the values look
-const IDENTIFIER = /phone|mobile|\btel\b|whats\s*app|contact|pin\s*code|\bpin\b|\bzip\b|postal|aadhaa?r|\bpan\b|gst|ifsc|account|\bacc\b|\bcode\b|\bid\b|\bno\.?$|number$/i;
+const IDENTIFIER = /phone|mobile|\btel\b|whats\s*app|contact|pin\s*code|\bpin\b|\bzip\b|postal|aadhaa?r|\bpan\b|gstin|gst\s*(no|number)|ifsc|account|\bacc\b|\bcode\b|\bid\b|\bno\.?$|number$/i;
 const looksLikeIdentifier = (source: string, filled: string[]) =>
   IDENTIFIER.test(source) || filled.some((v) => /^\+|^0\d/.test(v.trim()) || /^\d{10,}$/.test(v.replace(/[\s-]/g, "")));
 

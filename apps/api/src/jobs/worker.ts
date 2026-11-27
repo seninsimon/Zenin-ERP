@@ -21,6 +21,7 @@ import { runImport } from "./importJob.js";
 import { runMigration } from "../migration/run.js";
 
 const HANDLERS = { export: runExport, import: runImport, migration: runMigration } as const;
+const JOB_TYPES = Object.keys(HANDLERS);
 const POLL_MS = 5_000;
 const HOUSEKEEPING_MS = 10 * 60_000;
 const MAIL_MS = 5_000;
@@ -44,7 +45,7 @@ export async function runJob(job: Job): Promise<void> {
 // Process queued jobs until the queue is empty (used by tests).
 export async function drainJobs(): Promise<number> {
   let count = 0;
-  for (let job = await claimNextJob(); job; job = await claimNextJob()) {
+  for (let job = await claimNextJob(JOB_TYPES); job; job = await claimNextJob(JOB_TYPES)) {
     await runJob(job);
     count++;
   }
@@ -125,7 +126,7 @@ export async function startWorker(): Promise<() => Promise<void>> {
     while (running) {
       let job: Job | null = null;
       try {
-        job = await claimNextJob();
+        job = await claimNextJob(JOB_TYPES);
       } catch (err) {
         logger.error({ err }, "could not claim a job");
       }

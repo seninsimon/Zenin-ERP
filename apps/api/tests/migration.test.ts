@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { drainJobs } from "../src/jobs/worker.js";
+import { query } from "../src/db/pool.js";
 import { parseDate, parseNumber } from "../src/migration/analyze.js";
 import { login, unique } from "./helpers.js";
 
@@ -141,6 +142,25 @@ describe("Bring your data", async () => {
     for (const t of tables) expect((await admin.get(`/api/schema/${t}`)).status).toBe(404);
     expect((await admin.get("/api/apps")).body.apps.some((a: { key: string; installed: unknown }) => a.key === mig.appKey && a.installed)).toBe(false);
     expect((await admin.get(`/api/migration/${mig._id}`)).status).toBe(404);
+  });
+
+  it("a worker that doesn't know a job type leaves it; a failed job doesn't leave an import 'importing'", async () => {
+    // a newer kind of job, as an older worker would see it: not taken
+    const { rows } = await query<{ _id: string }>(`INSERT INTO jobs (type, table_name, user_id, username) VALUES ('from_the_future', '', 'x', 'x') RETURNING _id`);
+    await drainJobs();
+    expect((await query<{ status: string }>(`SELECT status FROM jobs WHERE _id = $1`, [rows[0]._id])).rows[0].status).toBe("queued");
+    await query(`DELETE FROM jobs WHERE _id = $1`, [rows[0]._id]);
+
+    // an older worker took the import's job and failed it before it began
+    const res = await upload([[await workbook(), `Stolen ${tag}.xlsx`]]);
+    expect(res.status).toBe(201);
+    const m = res.body as Mig;
+    const job = await query<{ _id: string }>(`INSERT INTO jobs (type, table_name, user_id, username, status, error) VALUES ('migration', '', 'x', 'x', 'failed', 'HANDLERS[job.type] is not a function') RETURNING _id`);
+    await query(`UPDATE migrations SET status = 'importing', job_id = $2 WHERE _id = $1`, [m._id, job.rows[0]._id]);
+    const shown = (await admin.get(`/api/migration/${m._id}`).expect(200)).body;
+    expect(shown.status).toBe("failed");
+    expect(shown.error).toMatch(/didn't run.*Nothing was kept/);
+    await admin.del(`/api/migration/${m._id}`).expect(200);
   });
 
   it("refuses files it can't read", async () => {

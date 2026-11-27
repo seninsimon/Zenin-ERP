@@ -96,14 +96,17 @@ export async function createJob(input: {
   return toJob(rows[0]);
 }
 
-export async function claimNextJob(): Promise<Job | null> {
+// Only job types this worker knows: an older worker sharing the database
+// (e.g. a deployed copy not updated yet) leaves newer kinds for a newer one.
+export async function claimNextJob(types: readonly string[]): Promise<Job | null> {
   const { rows } = await query<JobRow>(
     `UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1
      WHERE _id = (
-       SELECT _id FROM jobs WHERE status = 'queued'
+       SELECT _id FROM jobs WHERE status = 'queued' AND type = ANY($1::text[])
        ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
      )
-     RETURNING *`
+     RETURNING *`,
+    [types]
   );
   return rows[0] ? toJob(rows[0]) : null;
 }

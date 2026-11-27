@@ -37,6 +37,13 @@ async function requireOn() {
 // what the page gets: the plan, the proof, and the progress while importing
 async function shown(m: Migration) {
   const job = m.jobId && m.status === "importing" ? await getJob(m.jobId) : null;
+  // the job behind it failed before the import could even start (or is gone):
+  // say so, instead of "importing" forever. Nothing was made then.
+  if (m.status === "importing" && (!job || job.status === "failed")) {
+    const error = `The import didn't run${job?.error ? ` (${job.error})` : ""}. Nothing was kept: remove it and try again.`;
+    await updateMigration(m._id, { status: "failed", error });
+    m = { ...m, status: "failed", error };
+  }
   return {
     _id: m._id,
     name: m.name,

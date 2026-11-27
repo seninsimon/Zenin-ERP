@@ -28,6 +28,9 @@ export function splitStatements(sql: string): Statement[] {
   let delimiter = ";";
   let buf = "";
   let i = 0;
+  // MySQL's executable comments (/*!50003 CREATE */) hold real SQL: their
+  // content is kept, and their closing */ dropped
+  let executable = 0;
   const n = sql.length;
   const flush = () => {
     const text = buf.trim();
@@ -73,9 +76,21 @@ export function splitStatements(sql: string): Statement[] {
       i = e === -1 ? n : e;
       continue;
     }
+    if (c === "/" && sql[i + 1] === "*" && sql[i + 2] === "!") {
+      i += 3;
+      while (i < n && /\d/.test(sql[i])) i++;
+      executable++;
+      buf += " ";
+      continue;
+    }
+    if (c === "*" && sql[i + 1] === "/" && executable > 0) {
+      executable--;
+      i += 2;
+      buf += " ";
+      continue;
+    }
     if (c === "/" && sql[i + 1] === "*") {
       const e = sql.indexOf("*/", i + 2);
-      // MySQL's /*!40101 ... */ hints are kept out too
       i = e === -1 ? n : e + 2;
       buf += " ";
       continue;
@@ -318,7 +333,8 @@ export function readSqlDump(sql: string): SqlDump {
       }
       continue;
     }
-    if ((m = /^CREATE\s+(?:OR\s+REPLACE\s+|OR\s+ALTER\s+)?(?:DEFINER\s*=\s*\S+\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?(?:ALGORITHM\s*=\s*\w+\s+)?(?:MATERIALIZED\s+)?(FUNCTION|PROCEDURE|PROC|TRIGGER|VIEW)\s+([^\s(]+)/i.exec(text))) {
+    // the options come in any order: CREATE ALGORITHM=… DEFINER=… SQL SECURITY … VIEW
+    if ((m = /^CREATE\s+(?:OR\s+REPLACE\s+|OR\s+ALTER\s+)?(?:(?:DEFINER\s*=\s*\S+|SQL\s+SECURITY\s+\w+|ALGORITHM\s*=\s*\w+|MATERIALIZED)\s+)*(FUNCTION|PROCEDURE|PROC|TRIGGER|VIEW)\s+([^\s(]+)/i.exec(text.replace(/\s+/g, " ")))) {
       const kind = m[1].toUpperCase();
       logic.push({
         kind: kind === "PROC" || kind === "PROCEDURE" ? "procedure" : (kind.toLowerCase() as SqlLogic["kind"]),

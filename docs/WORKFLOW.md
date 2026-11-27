@@ -1018,8 +1018,33 @@ is refused (403), because it takes large uploads.
 6. **Remove** (`DELETE /migration/:id`): a review is forgotten; an import's
    tables, records and app are deleted (to try again).
 
-Not yet: database dumps (`.sql`) and the AI report for stored procedures,
-functions and triggers (`workspace/MIGRATION_PLAN.md`, parts 2 and 3).
+**Database dumps** (`.sql`, part 2; `sqlDump.ts`): plain dumps from
+mysqldump, pg_dump (plain format) or SQL Server "Generate Scripts" with data.
+- `splitStatements` splits on the delimiter outside quotes, comments and
+  `$$` bodies, follows MySQL's `DELIMITER` and SQL Server's `GO`, and reads
+  the data block after `COPY … FROM stdin`.
+- Read exactly: `CREATE TABLE` (columns, types, `NOT NULL`, inline and table
+  `PRIMARY KEY` / `UNIQUE` / `FOREIGN KEY … REFERENCES`), `ALTER TABLE … ADD
+  CONSTRAINT`, MySQL `enum(…)` and Postgres `CREATE TYPE … AS ENUM`; rows
+  from `INSERT … VALUES (…),(…)` and `COPY`.
+- **Types from the SQL type:** int/decimal/money → number (keys and
+  phone-like columns → text), bool/bit/tinyint(1) → Yes/No, date/datetime/
+  timestamp → date (the time of day isn't kept; the review says so),
+  text/json → long text, enums → choice, varchar → text or a choice when the
+  values are a short repeating list. `NOT NULL` → required.
+- **Links from foreign keys** (one column to one column; a link to itself or
+  a loop stays text). An auto-numbered `id` key is left out by default;
+  links still use its values.
+
+**The old system's logic** (part 3; `explain.ts`): `CREATE FUNCTION /
+PROCEDURE / TRIGGER / VIEW` are kept on the plan (`plan.logic`) with a first
+guess (trigger → automation, view → report, the rest → needs a person).
+**Explain with AI** (`POST /migration/:id/explain`, AI feature
+`migrationAi`, "Explain old-system logic") asks the chosen AI, 8 at a time,
+for a plain-English summary, the Zenin equivalent (formula, total,
+automation, approval, default, required, report, none), how to set it up,
+and whether a person must decide ("none" always needs a person). The SQL is
+only read and sent as data, never run; nothing is created from the answer.
 
 ### Changing many records at once (bulk update)
 
@@ -1184,8 +1209,9 @@ access on the person.
     schema again, and provider errors become plain messages (key refused,
     unknown model, out of credit).
   - **Test** (`POST /api/ai/test`) sends one tiny request.
-  - **Features** (`settings.features`, one switch per built feature; now
-    only `draftApps`): with no key every feature is off. A switched-off
+  - **Features** (`settings.features`, one switch per built feature:
+    `draftApps`, `askZenin`, `accessAi`, `migrationAi`): with no key every
+    feature is off. A switched-off
     feature answers 403 and disappears from the screens.
   - **Usage** (`ai/usage.ts`, table `ai_usage`, migration 015): every
     request, worked or not, adds a row: feature, person, provider, model,

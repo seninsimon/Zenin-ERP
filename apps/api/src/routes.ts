@@ -148,6 +148,7 @@ r.get("/migration/:id", adminOnly, handle(migration.getHandler));
 r.put("/migration/:id/plan", adminOnly, handle(migration.planHandler));
 r.post("/migration/:id/import", adminOnly, handle(migration.importHandler));
 r.get("/migration/:id/problems", adminOnly, handle(migration.problemsHandler));
+r.post("/migration/:id/explain", adminOnly, handle(migration.explainHandler));
 r.delete("/migration/:id", adminOnly, handle(migration.deleteHandler));
 // saved reports on Home (admins pin, rename, remove; everyone sees them in their apps)
 r.post("/reports", adminOnly, handle(reports.createReportHandler));

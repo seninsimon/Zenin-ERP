@@ -10,7 +10,7 @@ import { Section } from "../../components/ui/Page";
 // Administration → AI: the features, what they cost, and the limits.
 // See docs/WORKFLOW.md, "Drafted with AI"
 
-export type AiFeatures = { draftApps: boolean; askZenin: boolean; accessAi: boolean };
+export type AiFeatures = { draftApps: boolean; askZenin: boolean; accessAi: boolean; migrationAi: boolean };
 export type AiLimits = { monthlyUsd: number | null; perPersonDaily: number | null };
 
 type Totals = { requests: number; failed: number; inputTokens: number; outputTokens: number; costUsd: number; unpriced: number };
@@ -33,8 +33,13 @@ const FEATURES: { key: keyof AiFeatures; label: string; description: string }[] 
     label: "Change access with AI",
     description: "Users → Tell Zenin what to change: for admins. The AI suggests a change with a preview of what it does; nothing changes until an admin presses Apply.",
   },
+  {
+    key: "migrationAi",
+    label: "Explain old-system logic",
+    description: "Bring your data: the AI explains the old database's procedures, functions, triggers and views in plain English, and what to use in Zenin instead. Nothing is created from it.",
+  },
 ];
-const FEATURE_NAMES: Record<string, string> = { draftApps: "Draft apps", askZenin: "Ask Zenin", accessAi: "Change access with AI", test: "Test" };
+const FEATURE_NAMES: Record<string, string> = { draftApps: "Draft apps", askZenin: "Ask Zenin", accessAi: "Change access with AI", migrationAi: "Explain old-system logic", test: "Test" };
 const BILLING: Record<string, { label: string; url: string }> = {
   anthropic: { label: "Anthropic Console → Billing", url: "https://console.anthropic.com/settings/billing" },
   gemini: { label: "Google AI Studio → Usage & billing", url: "https://aistudio.google.com/usage" },

@@ -44,7 +44,7 @@ function columnsFor(t: PlanTable, plan: Plan) {
   return t.columns
     .filter((c) => c.include)
     .map((c) => {
-      const base = { name: c.name, label: c.label || c.source };
+      const base = { name: c.name, label: c.label || c.source, ...(c.required ? { required: true } : {}) };
       if (c.type === "choice") return { ...base, type: "choice", options: (c.options ?? []).map((label) => ({ label })) };
       if (c.type === "relation") {
         const target = plan.tables.find((x) => x.key === c.link?.table && x.include);
@@ -96,7 +96,7 @@ export async function runMigration(job: Job): Promise<{ result: JobResult }> {
   let appKey: string | null = null;
 
   try {
-    const sheets = await readFiles(await readStoredFiles(migration.fileKeys, migration.fileNames));
+    const { sheets } = await readFiles(await readStoredFiles(migration.fileKeys, migration.fileNames));
     // 1. the app, named after the file ("Clinic data"), and its tables
     await loadDraftedApps();
     const base = migration.name.replace(/\.(xlsx|csv|txt)$/i, "").replace(/·/g, "-").slice(0, 34) || "Imported data";

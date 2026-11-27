@@ -10,6 +10,9 @@ import { getAllSchemas } from "../schema/schemaRepo.js";
 import { storage } from "../storage.js";
 import { makePlan, readFiles, restatColumn, slug, type Plan, type PlanType, type SourceFile } from "../migration/analyze.js";
 import { readStoredFiles, removeImported } from "../migration/run.js";
+import { explainLogic } from "../migration/explain.js";
+import { featureOn } from "../ai/settings.js";
+import { isAdmin } from "../auth/access.js";
 import {
   createMigration,
   deleteMigrationRow,
@@ -50,10 +53,10 @@ async function shown(m: Migration) {
   };
 }
 
-// GET /migration: the switch and the imports
+// GET /migration: the switch, the imports, and whether the AI can explain logic
 export async function listHandler(_req: Request, res: Response) {
   const enabled = await migrationEnabled();
-  res.json({ enabled, imports: enabled ? await Promise.all((await listMigrations()).map(shown)) : [] });
+  res.json({ enabled, aiReady: await featureOn("migrationAi"), imports: enabled ? await Promise.all((await listMigrations()).map(shown)) : [] });
 }
 
 // PUT /migration/settings { enabled }
@@ -89,16 +92,16 @@ export async function uploadHandler(req: Request, res: Response) {
   });
   const mb = Math.round(env.importMaxBytes / 1024 / 1024);
   if (tooLarge) throw new HttpError(413, `The files are larger than ${mb} MB together. Split them, or ask for help with a bigger move.`);
-  if (!files.length) throw new HttpError(400, "Choose an Excel (.xlsx) or CSV file");
+  if (!files.length) throw new HttpError(400, "Choose an Excel (.xlsx), CSV or SQL dump (.sql) file");
 
-  let sheets;
+  let read;
   try {
-    sheets = await readFiles(files);
+    read = await readFiles(files);
   } catch (e) {
     throw new HttpError(400, (e as Error).message);
   }
-  if (!sheets.length) throw new HttpError(400, "The files have no rows in them");
-  const plan = makePlan(sheets, new Set((await getAllSchemas()).map((s) => s.tableName)));
+  if (!read.sheets.length) throw new HttpError(400, "The files have no tables or rows in them");
+  const plan = makePlan(read.sheets, new Set((await getAllSchemas()).map((s) => s.tableName)), read.logic);
 
   const id = randomUUID();
   const keys: string[] = [];
@@ -133,10 +136,11 @@ export async function planHandler(req: Request, res: Response) {
   const edited = req.body?.plan as Plan | undefined;
   if (!edited || !Array.isArray(edited.tables)) throw new HttpError(400, "plan is required");
 
-  const sheets = await readFiles(await readStoredFiles(m.fileKeys, m.fileNames));
+  const { sheets } = await readFiles(await readStoredFiles(m.fileKeys, m.fileNames));
   const taken = new Set((await getAllSchemas()).map((s) => s.tableName.toLowerCase()));
   const names = new Set<string>();
-  const next: Plan = { tables: [] };
+  // the old system's logic stays as it is (explained separately)
+  const next: Plan = { tables: [], ...(m.plan.logic ? { logic: m.plan.logic } : {}) };
   for (const original of m.plan.tables) {
     const e = edited.tables.find((t) => t.key === original.key) ?? original;
     const tableName = slug(String(e.tableName ?? original.tableName), "table");
@@ -177,6 +181,19 @@ export async function importHandler(req: Request, res: Response) {
   const job = await createJob({ type: "migration", tableName: "", userId: user._id, username: user.username, params: { migrationId: m._id } });
   await updateMigration(m._id, { status: "importing", jobId: job._id, error: null });
   res.status(202).json(await shown((await getMigration(m._id))!));
+}
+
+// POST /migration/:id/explain: the old system's procedures, functions,
+// triggers and views explained by the AI (part 3), kept on the plan
+export async function explainHandler(req: Request, res: Response) {
+  const m = await loadOne(req);
+  if (!m.plan.logic?.length) throw new HttpError(400, "This upload has no procedures, functions, triggers or views");
+  if (!(await featureOn("migrationAi"))) throw new HttpError(400, 'Set up AI first: Administration → AI, with "Explain old-system logic" on');
+  const user = currentUser(req);
+  const logic = await explainLogic(m.plan, { _id: user._id, isAdmin: isAdmin(user) });
+  await updateMigration(m._id, { plan: { ...m.plan, logic } });
+  await audit(req, { action: "update", entity: "app", recordId: `migration:${m._id}`, changes: { explained: { to: logic.filter((l) => l.explained).length } } });
+  res.json(await shown((await getMigration(m._id))!));
 }
 
 // GET /migration/:id/problems: the values that didn't fit, as CSV

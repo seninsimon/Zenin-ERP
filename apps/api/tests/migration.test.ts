@@ -45,7 +45,7 @@ describe("Bring your data", async () => {
 
   it("is off by default, and only admins switch it", async () => {
     await admin.put("/api/migration/settings", { enabled: false }).expect(200);
-    expect((await admin.get("/api/migration")).body).toEqual({ enabled: false, imports: [] });
+    expect((await admin.get("/api/migration")).body).toMatchObject({ enabled: false, imports: [] });
     expect((await upload([[await workbook(), "Clinic.xlsx"]])).status).toBe(403);
     const memberId = (await admin.get("/api/roles")).body.find((r: { name: string; appKey: string | null }) => r.name === "Member" && !r.appKey)._id;
     const username = unique("u").toLowerCase();

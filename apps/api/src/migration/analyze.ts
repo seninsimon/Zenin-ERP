@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { parse } from "csv-parse/sync";
+import { readSqlDump, type SqlLogic, type SqlTable } from "./sqlDump.js";
 
 // Bring your data (docs/WORKFLOW.md), part 1: read an Excel workbook (each
 // sheet a table) or CSV files (each file a table), and work out a plan:
@@ -8,7 +9,15 @@ import { parse } from "csv-parse/sync";
 
 export type SourceFile = { name: string; buffer: Buffer };
 // one sheet or CSV file: its header and data rows, every cell as text
-export type Sheet = { file: number; sheet: string | null; source: string; header: string[]; rows: string[][] };
+export type Sheet = {
+  file: number;
+  sheet: string | null;
+  source: string;
+  header: string[];
+  rows: string[][];
+  // from a database dump: the table as the database defined it
+  sql?: SqlTable;
+};
 
 export type PlanType = "text" | "textarea" | "number" | "date" | "boolean" | "choice" | "relation";
 export type DateOrder = "dmy" | "mdy" | "ymd";
@@ -21,6 +30,7 @@ export type PlanColumn = {
   type: PlanType;
   include: boolean;
   options?: string[]; // a choice's options
+  required?: boolean; // NOT NULL in the old database
   dateOrder?: DateOrder;
   link?: { table: string; by: number; match: number }; // relation: plan table key, its column index, % matched
   filled: number; // cells with a value
@@ -38,7 +48,22 @@ export type PlanTable = {
   unique: number[]; // columns whose values are all different (can be linked to)
   columns: PlanColumn[];
 };
-export type Plan = { tables: PlanTable[] };
+// What Zenin has instead of the old system's logic (part 3)
+export const ZENIN_EQUIVALENTS = ["formula", "total", "automation", "approval", "default", "required", "report", "none"] as const;
+export type ZeninEquivalent = (typeof ZENIN_EQUIVALENTS)[number];
+// a stored procedure, function, trigger or view of the old database
+export type LogicItem = {
+  kind: SqlLogic["kind"];
+  name: string;
+  sql: string;
+  table?: string; // a trigger's table
+  summary?: string; // what it does, in plain English (AI)
+  zenin: ZeninEquivalent; // what to use in Zenin instead
+  suggestion?: string; // how (AI)
+  needsPerson: boolean;
+  explained: boolean; // by the AI
+};
+export type Plan = { tables: PlanTable[]; logic?: LogicItem[] };
 
 const MAX_SAMPLES = 3;
 const MAX_CHOICES = 12;
@@ -88,8 +113,9 @@ function toSheet(file: number, sheet: string | null, source: string, grid: strin
   return { file, sheet, source, header, rows };
 }
 
-export async function readFiles(files: SourceFile[]): Promise<Sheet[]> {
+export async function readFiles(files: SourceFile[]): Promise<{ sheets: Sheet[]; logic: SqlLogic[] }> {
   const sheets: Sheet[] = [];
+  const logic: SqlLogic[] = [];
   for (const [i, f] of files.entries()) {
     const lower = f.name.toLowerCase();
     if (lower.endsWith(".xlsx")) {
@@ -123,11 +149,17 @@ export async function readFiles(files: SourceFile[]): Promise<Sheet[]> {
       }
       const sheet = toSheet(i, null, f.name.replace(/\.(csv|txt)$/i, ""), grid);
       if (sheet) sheets.push(sheet);
+    } else if (lower.endsWith(".sql")) {
+      // a database dump: tables, keys, links and rows, plus the logic to report on
+      const dump = readSqlDump(f.buffer.toString("utf8"));
+      if (!dump.tables.length && !dump.logic.length) throw new Error(`"${f.name}" has no CREATE TABLE in it. Export it as plain SQL (mysqldump, pg_dump --format=plain, or SQL Server "Generate Scripts" with data).`);
+      for (const t of dump.tables) sheets.push({ file: i, sheet: t.name, source: t.name, header: t.columns.map((c) => c.name), rows: t.rows, sql: t });
+      logic.push(...dump.logic);
     } else {
-      throw new Error(`"${f.name}": only Excel (.xlsx) and CSV files can be read here`);
+      throw new Error(`"${f.name}": only Excel (.xlsx), CSV and SQL dump (.sql) files can be read here`);
     }
   }
-  return sheets;
+  return { sheets, logic };
 }
 
 /* ---------------- values ---------------- */
@@ -169,8 +201,9 @@ export function parseDate(raw: string, order: DateOrder = "dmy"): string | null 
   return null;
 }
 
-const TRUE = ["yes", "y", "true", "1", "active"];
-const FALSE = ["no", "n", "false", "0", "inactive"];
+// "t"/"f": how Postgres writes booleans in a dump
+const TRUE = ["yes", "y", "true", "1", "active", "t"];
+const FALSE = ["no", "n", "false", "0", "inactive", "f"];
 export function parseBoolean(raw: string): boolean | null {
   const s = raw.trim().toLowerCase();
   return TRUE.includes(s) ? true : FALSE.includes(s) ? false : null;
@@ -242,65 +275,118 @@ function guessColumn(index: number, source: string, values: string[], rowCount: 
 
 const norm = (v: string) => v.trim().toLowerCase();
 
-export function makePlan(sheets: Sheet[], takenTables: Set<string>): Plan {
+// "customer_id" -> "Customer", "placed_at" -> "Placed at"
+const humanize = (name: string, link: boolean) => {
+  const words = name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_\s]+/g, " ").trim();
+  const base = link ? words.replace(/\s+id$/i, "") || words : words;
+  return base.charAt(0).toUpperCase() + base.slice(1).toLowerCase();
+};
+
+// A database column's type in Zenin, from its SQL type (the values only help
+// with text columns: a short repeating list becomes a choice)
+function sqlColumn(index: number, sheet: Sheet, isKey: boolean, isLink: boolean): PlanColumn {
+  const col = sheet.sql!.columns[index];
+  const values = sheet.rows.map((r) => r[index] ?? "");
+  const guess = guessColumn(index, col.name, values, sheet.rows.length);
+  const t = col.sqlType.toLowerCase();
+  let type: PlanType;
+  if (col.enumValues?.length) type = "choice";
+  else if (isLink) type = "relation";
+  else if (/^(bool|boolean|bit\b|bit\s*\(\s*1\s*\)|tinyint\s*\(\s*1\s*\))/.test(t)) type = "boolean";
+  else if (/int|serial|decimal|numeric|float|double|real|money|^number/.test(t)) type = isKey || looksLikeIdentifier(col.name, values.filter(Boolean)) ? "text" : "number";
+  else if (/^(date|datetime|datetime2|smalldatetime|timestamp)/.test(t)) type = "date";
+  else if (/text|clob|json|xml/.test(t)) type = "textarea";
+  else if (!t) type = guess.type;
+  else type = guess.type === "choice" || guess.type === "textarea" ? guess.type : "text";
+  const base: PlanColumn = { ...guess, type, label: humanize(col.name, isLink), required: col.notNull && !col.autoIncrement && !isKey };
+  const out = type === "relation" ? base : restatColumn(base, values);
+  // an enum's options are all its values, used or not
+  if (col.enumValues?.length) out.options = [...new Set([...col.enumValues, ...(out.options ?? [])])];
+  return out;
+}
+
+export function makePlan(sheets: Sheet[], takenTables: Set<string>, logic: SqlLogic[] = []): Plan {
   const usedTables = new Set([...takenTables].map((t) => t.toLowerCase()));
   const tables: PlanTable[] = sheets.map((s, i) => {
     let tableName = slug(s.source, "table");
     for (let n = 2; usedTables.has(tableName); n++) tableName = `${slug(s.source, "table").slice(0, 46)}_${n}`;
     usedTables.add(tableName);
     const usedCols = new Set<string>();
+    const sqlIndex = (name: string) => s.header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+    const key = s.sql?.primaryKey.length === 1 ? sqlIndex(s.sql.primaryKey[0]) : -1;
     const columns = s.header.map((h, c) => {
-      const col = guessColumn(
-        c,
-        h,
-        s.rows.map((r) => r[c] ?? ""),
-        s.rows.length
-      );
+      const isLink = Boolean(s.sql?.foreignKeys.some((f) => f.column.toLowerCase() === h.toLowerCase()));
+      const col = s.sql ? sqlColumn(c, s, c === key, isLink) : guessColumn(c, h, s.rows.map((r) => r[c] ?? ""), s.rows.length);
       let name = slug(h, "column");
       for (let n = 2; usedCols.has(name); n++) name = `${slug(h, "column").slice(0, 46)}_${n}`;
       usedCols.add(name);
-      return { ...col, name };
+      // a database's own numbering (id 1, 2, 3…) isn't needed in Zenin; links still use it
+      const surrogate = c === key && Boolean(s.sql?.columns[c]?.autoIncrement || /^id$/i.test(h));
+      return { ...col, name, include: !surrogate };
     });
-    // columns that identify a row (every value present and different): links can point at them
-    const unique = columns
-      .filter((c) => c.filled === s.rows.length && c.filled > 0 && new Set(s.rows.map((r) => norm(r[c.index] ?? ""))).size === c.filled)
-      .map((c) => c.index);
+    // columns that identify a row: a dump says which; otherwise every value present and different
+    const unique = s.sql
+      ? [...(key >= 0 ? [key] : []), ...s.sql.unique.filter((u) => u.length === 1).map((u) => sqlIndex(u[0])).filter((x) => x >= 0 && x !== key)]
+      : columns
+          .filter((c) => c.filled === s.rows.length && c.filled > 0 && new Set(s.rows.map((r) => norm(r[c.index] ?? ""))).size === c.filled)
+          .map((c) => c.index);
     return { key: `${i}:${s.source}`, file: s.file, sheet: s.sheet, source: s.source, tableName, include: true, rows: s.rows.length, unique, columns };
   });
 
-  // links: a column whose values are (almost) all found in another table's identifying column
   const valuesOf = (t: number, c: number) => new Set(sheets[t].rows.map((r) => norm(r[c] ?? "")).filter(Boolean));
+  const matchOf = (ti: number, ci: number, ui: number, by: number) => {
+    const mine = valuesOf(ti, ci);
+    const theirs = valuesOf(ui, by);
+    let hits = 0;
+    for (const v of mine) if (theirs.has(v)) hits++;
+    return { match: mine.size ? hits / mine.size : 1, size: mine.size };
+  };
   const edges: [number, number][] = [];
   const reaches = (from: number, to: number): boolean =>
     from === to || edges.some(([a, b]) => a === from && reaches(b, to));
+  const setLink = (ti: number, col: PlanColumn, ui: number, by: number) => {
+    const { match, size } = matchOf(ti, col.index, ui, by);
+    edges.push([ti, ui]);
+    col.type = "relation";
+    delete col.options;
+    col.link = { table: tables[ui].key, by, match: Math.round(match * 100) };
+    col.unfit = Math.round(size * (1 - match));
+  };
   for (const [ti, t] of tables.entries()) {
+    const sql = sheets[ti].sql;
     for (const col of t.columns) {
+      // a dump says exactly what links where (a link to itself, or a loop, stays text)
+      if (sql) {
+        const fk = sql.foreignKeys.find((f) => f.column.toLowerCase() === col.source.toLowerCase());
+        if (!fk) continue;
+        const ui = tables.findIndex((u, k) => sheets[k].sql && u.source.toLowerCase() === fk.refTable.toLowerCase());
+        const by = ui >= 0 ? sheets[ui].header.findIndex((h) => h.toLowerCase() === fk.refColumn.toLowerCase()) : -1;
+        if (ui >= 0 && ui !== ti && by >= 0 && !reaches(ui, ti)) setLink(ti, col, ui, by);
+        else if (col.type === "relation") Object.assign(col, restatColumn({ ...col, type: "text" }, sheets[ti].rows.map((r) => r[col.index] ?? "")));
+        continue;
+      }
       // the table's own key (its first identifying column) isn't a link
       if (!col.filled || t.unique[0] === col.index || col.type === "boolean" || col.type === "date") continue;
-      const mine = valuesOf(ti, col.index);
-      if (mine.size < 1) continue;
       let best: { table: number; by: number; match: number } | null = null;
       for (const [ui, u] of tables.entries()) {
         if (ui === ti) continue;
         for (const by of u.unique) {
-          const theirs = valuesOf(ui, by);
-          let hits = 0;
-          for (const v of mine) if (theirs.has(v)) hits++;
-          const match = hits / mine.size;
-          if (match >= LINK_MATCH && (!best || match > best.match)) best = { table: ui, by, match };
+          const { match, size } = matchOf(ti, col.index, ui, by);
+          if (size && match >= LINK_MATCH && (!best || match > best.match)) best = { table: ui, by, match };
         }
       }
       // no loops between tables (A links to B and B to A)
-      if (best && !reaches(best.table, ti)) {
-        edges.push([ti, best.table]);
-        col.type = "relation";
-        delete col.options;
-        col.link = { table: tables[best.table].key, by: best.by, match: Math.round(best.match * 100) };
-        col.unfit = Math.round(mine.size * (1 - best.match));
-      }
+      if (best && !reaches(best.table, ti)) setLink(ti, col, best.table, best.by);
     }
   }
-  return { tables };
+  return { tables, ...(logic.length ? { logic: logic.map(firstGuess) } : {}) };
+}
+
+// Before any AI: what each kind of logic usually becomes in Zenin
+function firstGuess(l: SqlLogic): LogicItem {
+  const table = l.kind === "trigger" ? /\bON\s+([^\s(]+)/i.exec(l.sql)?.[1]?.split(".").pop()?.replace(/[`"[\]]/g, "") : undefined;
+  const zenin: ZeninEquivalent = l.kind === "trigger" ? "automation" : l.kind === "view" ? "report" : "none";
+  return { kind: l.kind, name: l.name, sql: l.sql, ...(table ? { table } : {}), zenin, needsPerson: true, explained: false };
 }
 
 // Tables in an order where linked-to tables come first

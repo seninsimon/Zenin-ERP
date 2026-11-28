@@ -26,10 +26,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMediaQuery } from "@mantine/hooks";
 import { Link, useSearchParams } from "react-router-dom";
 
-import api, { errorMessage } from "../../api/api";
+import api, { errorMessage, type ConvertCheck } from "../../api/api";
 import { confirmDanger } from "../../components/ui/confirm";
 import { Page, PageHeader, Section } from "../../components/ui/Page";
-import { recordPath, tablePath, tableTitle } from "../../layout/nav";
+import { tablePath, tableTitle } from "../../layout/nav";
+import { ChangePreview } from "../../features/records/ChangePreview";
 import { formatDateTime, formatNumber, pluralize } from "../../lib/format";
 
 // Settings → Bring your data (docs/WORKFLOW.md): move data from Excel or
@@ -66,10 +67,6 @@ type Rule = {
   fills: number;
   used: boolean;
   changed: number;
-};
-type RuleCheck = {
-  proof: { checked: number; fits: number; differ: number; fills: number } | null;
-  examples: { id: string; title: string | null; now: string | null; becomes: string | null }[];
 };
 type Proof = { table: string; source: string; rowsInFile: number; imported: number; totals: { label: string; file: number; zenin: number; match: boolean }[]; problems: number };
 type Migration = {
@@ -366,7 +363,6 @@ function LogicReport({ m, aiReady, onChanged }: { m: Migration; aiReady: boolean
 
 /* ---------------- rules found in the data (part 4) ---------------- */
 
-const shownValue = (v: string | null) => (v === null || v === "" ? "empty" : /^-?\d+(\.\d+)?$/.test(v) ? formatNumber(Number(v)) : v);
 const fieldOf = (r: Rule) => r.says.split(" = ")[0];
 
 // "Use it": checked again on today's records, with what would change
@@ -375,7 +371,7 @@ function UseRule({ m, rule, onClose, onChanged }: { m: Migration; rule: Rule; on
   const phone = useMediaQuery("(max-width: 36em)");
   const check = useQuery({
     queryKey: ["migration-rule", m._id, rule.id],
-    queryFn: async () => (await api.get<RuleCheck>(`/migration/${m._id}/rules/${encodeURIComponent(rule.id)}`)).data,
+    queryFn: async () => (await api.get<ConvertCheck>(`/migration/${m._id}/rules/${encodeURIComponent(rule.id)}`)).data,
     gcTime: 0,
   });
   const p = check.data?.proof;
@@ -404,46 +400,7 @@ function UseRule({ m, rule, onClose, onChanged }: { m: Migration; rule: Rule; on
         {check.error && <Alert color="red">{errorMessage(check.error)}</Alert>}
         {p && (
           <>
-            <Text size="sm">
-              Checked on today's records: it fits {formatNumber(p.fits)} of {formatNumber(p.checked)}.
-              {p.fills ? ` ${pluralize(p.fills, "empty one")} will be filled.` : ""}
-            </Text>
-            {p.differ > 0 && (
-              <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title={`${pluralize(p.differ, "record")} will change`} styles={{ body: { minWidth: 0 } }}>
-                <Text size="sm" mb={6}>
-                  Their value now isn't what the rule gives (typed by hand, or a mistake). They get the rule's value.
-                </Text>
-                <Box style={{ overflowX: "auto" }}>
-                  <Table fz="sm" verticalSpacing={4}>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th scope="col">Record</Table.Th>
-                        <Table.Th scope="col" ta="right">Now</Table.Th>
-                        <Table.Th scope="col" ta="right">Becomes</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {check.data!.examples.map((e) => (
-                        <Table.Tr key={e.id}>
-                          <Table.Td>
-                            <Anchor component={Link} to={recordPath(rule.table, e.id)} size="sm" target="_blank">
-                              {e.title || "Open"}
-                            </Anchor>
-                          </Table.Td>
-                          <Table.Td ta="right" className="tabular-nums">{shownValue(e.now)}</Table.Td>
-                          <Table.Td ta="right" className="tabular-nums">{shownValue(e.becomes)}</Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                </Box>
-                {p.differ > check.data!.examples.length && (
-                  <Text size="xs" c="dimmed" mt={4}>
-                    and {pluralize(p.differ - check.data!.examples.length, "more")}
-                  </Text>
-                )}
-              </Alert>
-            )}
+            <ChangePreview table={rule.table} check={check.data!} />
             <Text size="xs" c="dimmed">
               Not right? <b>Change back</b> makes it a normal field again, and puts back the values the rule changed.
             </Text>

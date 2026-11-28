@@ -21,6 +21,7 @@ import {
   updateTableSettings,
 } from "../schema/schemaRepo.js";
 import { tryFormula } from "../schema/formula.js";
+import { changeBack, checkConversion, conversionOf, convertColumn } from "../schema/convert.js";
 import { tableAccess } from "../auth/accessSummary.js";
 import { isStaffChoice, moveTable, MY_TABLES, placeNewTable, requireHome } from "../apps/ownApps.js";
 import { assertNotUsedByRollups } from "../schema/rollups.js";
@@ -227,4 +228,57 @@ export async function checkFormulaHandler(req: Request, res: Response) {
 // GET /schema/:table/access: every role that opens this table, for admins
 export async function getTableAccessHandler(req: Request, res: Response) {
   res.json(await tableAccess(await requireTable(param(req, "table"))));
+}
+
+/* ---------------- make a typed field a formula (schema/convert.ts) ---------------- */
+
+const expressionOf = (req: Request) => {
+  const expression = (req.body ?? {}).expression;
+  if (typeof expression !== "string" || !expression.trim()) throw new HttpError(400, "Enter a formula");
+  if (expression.length > 1_000) throw new HttpError(400, "The formula is too long (max 1,000 characters)");
+  return expression.trim();
+};
+
+// POST /schema/:table/column/:name/convert/check { expression }: how it fits
+// today's records, and some it would change
+export async function checkConvertHandler(req: Request, res: Response) {
+  await requireTable(param(req, "table"));
+  res.json(await checkConversion(param(req, "table"), param(req, "name"), { kind: "formula", expression: expressionOf(req) }));
+}
+
+// POST /schema/:table/column/:name/convert { expression }: make it a formula
+export async function convertHandler(req: Request, res: Response) {
+  const table = param(req, "table");
+  await requireTable(table);
+  const expression = expressionOf(req);
+  const { before, after, changed } = await convertColumn(table, param(req, "name"), { kind: "formula", expression }, currentUser(req)._id);
+  await audit(req, {
+    action: "update",
+    entity: "column",
+    tableName: table,
+    recordId: after.name,
+    changes: { type: { from: before.type, to: "formula" }, formula: { to: expression }, recordsUpdated: { to: changed } },
+  });
+  res.json({ message: "It's a formula now", data: after, changed });
+}
+
+// GET /schema/:table/column/:name/convert: can it be changed back?
+export async function conversionHandler(req: Request, res: Response) {
+  await requireTable(param(req, "table"));
+  res.json({ conversion: await conversionOf(param(req, "table"), param(req, "name")) });
+}
+
+// DELETE /schema/:table/column/:name/convert: Change back to a typed field
+export async function changeBackHandler(req: Request, res: Response) {
+  const table = param(req, "table");
+  await requireTable(table);
+  const { before, after, changed } = await changeBack(table, param(req, "name"));
+  await audit(req, {
+    action: "update",
+    entity: "column",
+    tableName: table,
+    recordId: after.name,
+    changes: { type: { from: before.type, to: after.type }, recordsUpdated: { to: changed } },
+  });
+  res.json({ message: "Changed back", data: after, changed });
 }

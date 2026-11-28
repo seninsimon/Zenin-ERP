@@ -5,7 +5,7 @@ import { IconAlertCircle, IconCircleCheck } from "@tabler/icons-react";
 
 import { checkFormula, errorMessage } from "../../api/api";
 import { useSchema } from "../../api/reactQueryHooks/useTables";
-import { columnLabel, type RecordColumn, type TableSchemaInfo } from "../../features/records/schema";
+import { columnLabel, type RecordColumn, type TableSchemaInfo } from "./schema";
 import { formatDate, formatNumber } from "../../lib/format";
 import { WithHelp } from "../../components/ui/HelpTip";
 
@@ -26,21 +26,26 @@ const showSample = (type: string, value: unknown) =>
             : "No"
           : `"${String(value)}"`;
 
-// The "Formula" field in the column settings: the expression, buttons that
-// insert a field, and a live check (is it valid, what does it give on the
-// latest record) as you type.
+// The "Formula" field (column settings, Make it a formula): the expression,
+// buttons that insert a field, and a live check (is it valid, what does it
+// give on the latest record) as you type. `showCheck` false: the caller
+// checks it itself (Make it a formula checks every record).
 export function FormulaEditor({
   table,
   columnName,
   value,
   onChange,
   error,
+  showCheck = true,
+  autoFocus,
 }: {
   table: string;
   columnName?: string;
   value: string;
   onChange: (value: string) => void;
   error?: string;
+  showCheck?: boolean;
+  autoFocus?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const schema = useSchema(table).data as TableSchemaInfo | undefined;
@@ -52,7 +57,7 @@ export function FormulaEditor({
   const [check, setCheck] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     let active = true;
-    if (!debounced.trim()) return;
+    if (!showCheck || !debounced.trim()) return;
     checkFormula(table, debounced, columnName)
       .then(({ data }) => {
         if (!active) return;
@@ -63,7 +68,7 @@ export function FormulaEditor({
     return () => {
       active = false;
     };
-  }, [debounced, table, columnName]);
+  }, [debounced, table, columnName, showCheck]);
 
   // put {field} where the cursor is, then the cursor right after it (set as
   // soon as the new text is on screen, before the next key press)
@@ -96,6 +101,7 @@ export function FormulaEditor({
         maxRows={6}
         styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
         value={value}
+        autoFocus={autoFocus}
         onChange={(e) => onChange(e.currentTarget.value)}
         error={error}
       />
@@ -122,7 +128,7 @@ export function FormulaEditor({
         Examples: <code>{"{qty} * {rate}"}</code> · <code>{"DAYS({to}, {from}) + 1"}</code> ·{" "}
         <code>{'IF({stock} < {reorder_level}, "Low", "")'}</code>
       </Text>
-      {check && value.trim() && !error && (
+      {showCheck && check && value.trim() && !error && (
         <Group gap={6} wrap="nowrap" align="flex-start">
           {check.ok ? (
             <IconCircleCheck size={16} color="var(--mantine-color-teal-6)" style={{ flexShrink: 0, marginTop: 2 }} />

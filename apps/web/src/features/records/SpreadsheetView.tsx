@@ -7,7 +7,8 @@ import { Link } from "react-router-dom";
 import { DataGrid, SelectColumn, type Column, type DataGridHandle } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 
-import { deleteData, errorMessage, getTableData, insertData, updateData, type ListFilter } from "../../api/api";
+import { deleteData, errorMessage, getTableData, getTotals, insertData, updateData, type ListFilter } from "../../api/api";
+import { useCurrentUser } from "../../auth/AuthContext";
 import { useBulkDelete } from "../../api/reactQueryHooks/useTables";
 import { confirmDanger } from "../../components/ui/confirm";
 import { BulkUpdateModal } from "./BulkUpdateModal";
@@ -19,7 +20,8 @@ import { useLiveChanges, useLiveHeldBack } from "../live/live";
 import { CompactFields } from "./fields/compact";
 import { FieldInput } from "./fields/FieldInput";
 import { newLookupCache, parseClipboard, PasteProblem, pastedValue } from "./pasteValues";
-import { columnLabel, FILE_TYPES, type RecordColumn, type TableSchemaInfo } from "./schema";
+import { CAN_BE_FORMULA, columnLabel, FILE_TYPES, type RecordColumn, type TableSchemaInfo } from "./schema";
+import { MakeFormulaModal } from "./MakeFormulaModal";
 import classes from "./spreadsheet.module.css";
 
 // The Spreadsheet view (docs/WORKFLOW.md): the table's records as
@@ -46,6 +48,9 @@ type Row = {
   raw: Record<string, unknown>; // stored values (ids), to edit and compare
   show: Record<string, unknown>; // names, to show
 };
+// the totals row at the bottom (its values come from GET /table/:t/totals)
+type TotalsRow = { _id: "totals" };
+const TOTALS_ROWS: readonly TotalsRow[] = [{ _id: "totals" }];
 type CellState = { state: "saving" | "saved" | "error"; message?: string };
 type Conflict = { id: string; column: RecordColumn; by: string; mine: unknown; title: string };
 // a block of cells, by grid position (rows from 0; columns as the grid counts them)
@@ -128,6 +133,7 @@ export function SpreadsheetView({
   filters,
   sort,
   order,
+  onColumnSettings,
 }: {
   table: string;
   schema: TableSchemaInfo;
@@ -136,6 +142,8 @@ export function SpreadsheetView({
   // the same order as the Table view
   sort?: string;
   order?: "asc" | "desc";
+  // admins: open a column's settings (null: add a column)
+  onColumnSettings?: (column: RecordColumn | null) => void;
 }) {
   const scheme = useComputedColorScheme("light");
   const heldBack = useLiveHeldBack();
@@ -238,6 +246,28 @@ export function SpreadsheetView({
   );
   const rows = useMemo(() => [...saved, ...drafts], [saved, drafts]);
   const total = (query.data?.total as number | undefined) ?? 0;
+  const { isAdmin } = useCurrentUser();
+
+  // the totals row: every record matching the search and filters (not just
+  // this page), again whenever the rows are fetched again (a save, a change)
+  const totals = useQuery({
+    queryKey: ["sheet-totals", table, search, filters, query.dataUpdatedAt],
+    queryFn: async () => (await getTotals(table, { search: search || undefined, filters })).data,
+    placeholderData: keepPreviousData,
+  });
+  const sums = totals.data?.sums ?? {};
+  const showTotals = Object.keys(sums).length > 0;
+
+  // = in a cell: a formula for the whole column (never one cell's own)
+  const [formulaFor, setFormulaFor] = useState<RecordColumn | null>(null);
+  const formulaKey = (column: RecordColumn) => {
+    const label = columnLabel(column);
+    if (!isAdmin) {
+      notifications.show({ title: "Formulas are for the whole column", message: `Ask an admin to make ${label} a formula: Zenin then works it out on every record.` });
+    } else if (CAN_BE_FORMULA.includes(column.type)) setFormulaFor(column);
+    else if ((column.type === "formula" || column.type === "rollup") && onColumnSettings) onColumnSettings(column);
+    else notifications.show({ message: `${label} can't be a formula: only Number, Date and Text fields can.` });
+  };
   const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r._id, i])), [rows]);
   const lastCol = DATA_START + columns.length - 1;
   const block = range && {
@@ -558,13 +588,22 @@ export function SpreadsheetView({
     grid.current?.scrollToCell({ rowIdx: r2, idx: c2 });
   };
 
-  const gridColumns: Column<Row>[] = [
+  const gridColumns: Column<Row, TotalsRow>[] = [
     { ...SelectColumn, frozen: true },
     {
       key: "_open",
       name: "",
       width: 44,
       frozen: true,
+      // the totals row says what it is here when the first field has a total of its own
+      renderSummaryCell: () =>
+        sums[columns[0]?.name] !== undefined ? (
+          <Tooltip label={`Totals of ${pluralize(totals.data?.count ?? 0, "record")}`}>
+            <Text span size="sm" fw={700} c="dimmed">
+              Σ
+            </Text>
+          </Tooltip>
+        ) : null,
       renderCell: ({ row }) =>
         row.draft ? (
           <Tooltip label={cells[key(row._id, "_row")]?.message ?? `New: fill ${required.map(columnLabel).join(", ") || "a cell"} to save it`}>
@@ -588,7 +627,7 @@ export function SpreadsheetView({
           </Tooltip>
         ),
     },
-    ...columns.map((c, i): Column<Row> => ({
+    ...columns.map((c, i): Column<Row, TotalsRow> => ({
       key: c.name,
       name: columnLabel(c),
       frozen: i < pinnedCount,
@@ -625,6 +664,21 @@ export function SpreadsheetView({
       },
       width: c.type === "boolean" ? 90 : c.type === "number" || c.type === "date" ? 130 : 180,
       editable: (row) => editable(c, row),
+      renderSummaryCell: () => {
+        const sum = sums[c.name];
+        if (sum === undefined) {
+          return i === 0 ? (
+            <Text span size="sm" fw={600}>
+              Total · {pluralize(totals.data?.count ?? 0, "record")}
+            </Text>
+          ) : null;
+        }
+        return (
+          <Text span size="sm" fw={600} className="tabular-nums">
+            {sum === null ? "" : formatNumber(sum)}
+          </Text>
+        );
+      },
       cellClass: (row) => {
         const s = cells[key(row._id, c.name)]?.state;
         const picked = inBlock(rowIndex.get(row._id) ?? -1, DATA_START + i);
@@ -721,6 +775,7 @@ export function SpreadsheetView({
           ? `${pluralize((block.bottom - block.top + 1) * (block.right - block.left + 1), "cell")} selected: Ctrl+C copies, Ctrl+V pastes into them, Delete empties them. `
           : ""}
         Click a cell and type; Enter saves, Esc cancels. Drag or Shift+click to select cells. Paste rows from Excel or Google Sheets. Ctrl+Z undoes.
+        {isAdmin ? " Press = in a column to make it a formula." : ""}
         {heldBack ? " Others' changes show every few seconds." : " Others' changes show as they happen."}
         {schema.byDepartment !== false && (schema.allowedDepartments?.length ?? 0) > 1 && ` New rows go to ${schema.allowedDepartments![0].name}.`}
       </Text>
@@ -754,9 +809,20 @@ export function SpreadsheetView({
           return { ...targetRow, raw: { ...targetRow.raw, [columnKey]: sourceRow.raw[columnKey] } };
         }}
         rowHeight={36}
+        bottomSummaryRows={showTotals ? TOTALS_ROWS : undefined}
+        summaryRowHeight={36}
         onActivePositionChange={({ rowIdx, column }) => setActive(column ? { rowIdx, colIdx: column.idx } : null)}
         onCellKeyDown={(args, event) => {
           if (args.mode === "ACTIVE") {
+            if (event.key === "=" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+              const column = columns.find((x) => x.name === args.column?.key);
+              if (column) {
+                event.preventGridDefault();
+                event.preventDefault();
+                formulaKey(column);
+                return;
+              }
+            }
             const arrows: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
             if (event.shiftKey && arrows[event.key]) {
               extendBy(...arrows[event.key]);
@@ -808,6 +874,7 @@ export function SpreadsheetView({
           return row;
         }}
       />
+      {formulaFor && <MakeFormulaModal table={table} column={formulaFor} onClose={() => setFormulaFor(null)} />}
       {bulkEdit && (
         <BulkUpdateModal
           table={table}
@@ -831,6 +898,11 @@ export function SpreadsheetView({
               onClick={() => setDrafts((d) => [...d, { _id: `draft-${Date.now()}`, draft: true, raw: {}, show: {} }])}
             >
               Add row
+            </Button>
+          )}
+          {isAdmin && onColumnSettings && (
+            <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => onColumnSettings(null)}>
+              Add column
             </Button>
           )}
           {pasting && (

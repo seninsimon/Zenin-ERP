@@ -95,6 +95,10 @@ r.post("/schema/:table/column", adminOnly, handle(schema.addColumnHandler));
 r.put("/schema/:table/column/:name", adminOnly, handle(schema.updateColumnHandler));
 r.delete("/schema/:table/column/:column", adminOnly, handle(schema.deleteColumnHandler));
 r.post("/schema/:table/formula/check", adminOnly, handle(schema.checkFormulaHandler));
+r.post("/schema/:table/column/:name/convert/check", adminOnly, handle(schema.checkConvertHandler));
+r.post("/schema/:table/column/:name/convert", adminOnly, handle(schema.convertHandler));
+r.get("/schema/:table/column/:name/convert", adminOnly, handle(schema.conversionHandler));
+r.delete("/schema/:table/column/:name/convert", adminOnly, handle(schema.changeBackHandler));
 r.get("/schema/:table/automations", adminOnly, handle(notifications.listAutomationsHandler));
 r.post("/schema/:table/automations", adminOnly, handle(notifications.createAutomationHandler));
 r.put("/schema/:table/automations/:id", adminOnly, handle(notifications.updateAutomationHandler));
@@ -174,6 +178,7 @@ r.post("/table/:collection", requireAuth, handle(records.createHandler));
 // these must come before "/table/:collection/:id"
 r.get("/table/:collection/options", requireAuth, handle(records.optionsHandler));
 r.get("/table/:collection/summary", requireAuth, handle(summary.summaryHandler));
+r.get("/table/:collection/totals", requireAuth, handle(summary.totalsHandler));
 r.post("/table/:collection/export", requireAuth, handle(jobs.startExportHandler));
 r.post("/table/:collection/bulk-delete", requireAuth, handle(records.bulkDeleteHandler));
 r.post("/table/:collection/bulk-update", requireAuth, handle(records.bulkUpdateHandler));

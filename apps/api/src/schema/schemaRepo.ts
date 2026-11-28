@@ -299,7 +299,11 @@ export async function deleteColumn(tableName: string, columnName: string) {
       }
       return columns.filter((c) => c.name !== columnName);
     },
-    (client) => deleteCounters(tableName, columnName, client)
+    async (client) => {
+      await deleteCounters(tableName, columnName, client);
+      // "Change back" (schema/convert.ts) has nothing to go back to now
+      await query(`DELETE FROM column_conversions WHERE table_name = $1 AND column_name = $2`, [tableName, columnName], client);
+    }
   );
   return { schema, removed: removed! };
 }
@@ -352,6 +356,7 @@ export async function findRelationsTo(tableName: string) {
 export async function deleteTable(schema: TableSchema, fileColumns: string[]): Promise<string[]> {
   const urls = await withTransaction(async (client) => {
     const table = dataTable(schema.tableName);
+    await query(`DELETE FROM column_conversions WHERE table_name = $1`, [schema.tableName], client);
     const exists = await query<{ t: string | null }>(`SELECT to_regclass($1) AS t`, [table], client);
 
     let found: string[] = [];

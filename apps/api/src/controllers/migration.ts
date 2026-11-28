@@ -11,7 +11,7 @@ import { storage } from "../storage.js";
 import { makePlan, readFiles, restatColumn, slug, type Plan, type PlanType, type SourceFile } from "../migration/analyze.js";
 import { readStoredFiles, removeImported } from "../migration/run.js";
 import { explainLogic } from "../migration/explain.js";
-import { checkRule, findRules, shownRule, undoRule, useRule } from "../migration/rules.js";
+import { checkRule, findRules, shownRules, undoRule, useRule } from "../migration/rules.js";
 import { featureOn } from "../ai/settings.js";
 import { isAdmin } from "../auth/access.js";
 import {
@@ -24,7 +24,6 @@ import {
   updateMigration,
   type Migration,
 } from "../migration/store.js";
-import type { Rule } from "../migration/rules.js";
 
 // Settings → Bring your data (docs/WORKFLOW.md). Admins only (routes).
 // Off by default; while off, everything but the switch is refused.
@@ -55,7 +54,7 @@ async function shown(m: Migration) {
     createdTables: m.createdTables,
     appKey: m.appKey,
     result: m.result,
-    rules: m.rules?.map(shownRule) ?? null,
+    rules: m.rules ? await shownRules(m.rules) : null,
     error: m.error,
     hasProblems: Boolean(m.problemsKey),
     progress: job?.progress ?? (m.status === "done" ? 100 : 0),
@@ -236,14 +235,13 @@ async function loadRule(req: Request) {
   if (!rule) throw new HttpError(404, "Rule not found");
   return { m, rule };
 }
-const saveRule = (m: Migration, rule: Rule) => updateMigration(m._id, { rules: (m.rules ?? []).map((r) => (r.id === rule.id ? rule : r)) });
 
 // POST /migration/:id/rules: look (again) for calculations in the imported
-// data. Rules already in use stay as they are.
+// data. Rules in use (made formulas) stay as they are.
 export async function findRulesHandler(req: Request, res: Response) {
   const m = await loadOne(req);
   if (m.status !== "done") throw new HttpError(409, "Import the data first");
-  const used = (m.rules ?? []).filter((r) => r.used);
+  const used = (await shownRules(m.rules ?? [])).filter((r) => r.used).map(({ changed: _c, ...r }) => r);
   const found = (await findRules(m.createdTables)).filter((r) => !used.some((u) => u.id === r.id));
   await updateMigration(m._id, { rules: [...used, ...found] });
   res.json(await shown((await getMigration(m._id))!));
@@ -259,8 +257,8 @@ export async function checkRuleHandler(req: Request, res: Response) {
 // POST /migration/:id/rules/:rule/use: the field becomes a formula or total
 export async function useRuleHandler(req: Request, res: Response) {
   const { m, rule } = await loadRule(req);
-  const { rule: used, changed } = await useRule(rule);
-  await saveRule(m, used);
+  if ((await shownRules([rule]))[0].used) throw new HttpError(409, "This rule is already in use");
+  const { changed } = await useRule(rule, currentUser(req)._id);
   await audit(req, {
     action: "update",
     entity: "column",
@@ -274,14 +272,13 @@ export async function useRuleHandler(req: Request, res: Response) {
 // POST /migration/:id/rules/:rule/undo: Change back
 export async function undoRuleHandler(req: Request, res: Response) {
   const { m, rule } = await loadRule(req);
-  const back = await undoRule(rule);
-  await saveRule(m, back);
+  const { changed } = await undoRule(rule);
   await audit(req, {
     action: "update",
     entity: "column",
     tableName: rule.table,
     recordId: rule.column,
-    changes: { type: { from: rule.kind === "total" ? "rollup" : "formula", to: rule.type }, rule: { from: rule.says }, recordsUpdated: { to: Object.keys(rule.restore ?? {}).length } },
+    changes: { type: { from: rule.kind === "total" ? "rollup" : "formula", to: rule.type }, rule: { from: rule.says }, recordsUpdated: { to: changed } },
   });
   res.json(await shown((await getMigration(m._id))!));
 }

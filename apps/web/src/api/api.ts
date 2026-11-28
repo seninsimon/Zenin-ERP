@@ -78,6 +78,20 @@ export const checkFormula = (table: string, expression: string, column?: string)
   );
 
 
+// Make a typed field a formula (the whole column): checked on every record first
+export type ConvertCheck = {
+  proof: { checked: number; fits: number; differ: number; fills: number } | null;
+  examples: { id: string; title: string | null; now: string | null; becomes: string | null }[];
+};
+const convertUrl = (table: string, column: string) => `/schema/${encodeURIComponent(table)}/column/${encodeURIComponent(column)}/convert`;
+export const checkConvert = (table: string, column: string, expression: string) => api.post<ConvertCheck>(`${convertUrl(table, column)}/check`, { expression });
+export const convertToFormula = (table: string, column: string, expression: string) =>
+  api.post<{ message: string; changed: number }>(convertUrl(table, column), { expression });
+// was this field made a formula here (so it can be changed back)?
+export const getConversion = (table: string, column: string) =>
+  api.get<{ conversion: { from: string; changed: number } | null }>(convertUrl(table, column));
+export const changeBackColumn = (table: string, column: string) => api.delete<{ message: string; changed: number }>(convertUrl(table, column));
+
 //tables
 
 // One page of records. Rows are keyed by column NAME and include
@@ -105,6 +119,15 @@ export const getTableData = (
   const clean = filters?.map(({ field, op, value, value2 }) => ({ field, op, value, value2 }));
   return api.get(`/table/${encodeURIComponent(table)}`, {
     params: { ...rest, ...(raw ? { raw: 1 } : {}), ...(withRaw ? { withRaw: 1 } : {}), ...(clean?.length ? { filters: JSON.stringify(clean) } : {}) },
+  });
+};
+
+// The spreadsheet's totals row: how many records match the search and
+// filters, and the sum of each number field (all of them, not one page)
+export const getTotals = (table: string, params: { search?: string; filters?: ListFilter[] }) => {
+  const clean = params.filters?.map(({ field, op, value, value2 }) => ({ field, op, value, value2 }));
+  return api.get<{ count: number; sums: Record<string, number | null> }>(`/table/${encodeURIComponent(table)}/totals`, {
+    params: { ...(params.search ? { search: params.search } : {}), ...(clean?.length ? { filters: JSON.stringify(clean) } : {}) },
   });
 };
 

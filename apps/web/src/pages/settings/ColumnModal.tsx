@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Alert,
   Button,
   Checkbox,
   Group,
@@ -17,14 +18,19 @@ import {
 import { useForm } from "@mantine/form";
 import { useMediaQuery } from "@mantine/hooks";
 
-import { errorMessage } from "../../api/api";
+import { changeBackColumn, errorMessage, getConversion } from "../../api/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { notifications } from "@mantine/notifications";
+import { IconMathFunction } from "@tabler/icons-react";
+import { MakeFormulaModal } from "../../features/records/MakeFormulaModal";
+import { CAN_BE_FORMULA, type RecordColumn } from "../../features/records/schema";
 import { useAddColumn, useTables, useUpdateColumn } from "../../api/reactQueryHooks/useTables";
 import { useAccessLevels } from "../../api/reactQueryHooks/useAdmin";
 import { tableTitle } from "../../layout/nav";
 import type { ChoiceOption, RollupConfig } from "../../features/records/schema";
 import { ChoiceOptionsEditor } from "./ChoiceOptionsEditor";
 import { DefaultValueInput } from "./DefaultValueInput";
-import { FormulaEditor } from "./FormulaEditor";
+import { FormulaEditor } from "../../features/records/FormulaEditor";
 import { RollupEditor } from "./RollupEditor";
 import { columnTypeInfo, columnTypes, INDEXABLE_TYPES, INDEXED_HELP, optionsError, slugify } from "./columnTypes";
 import classes from "./settings.module.css";
@@ -309,6 +315,7 @@ export function ColumnModal({
   const editTypes = columnTypes.filter((t) => allowedEditType(t.value)).map((t) => ({ value: t.value, label: t.label }));
   const typeHelp = () => {
     if (column?.type === "relation") return `Links to ${tableTitle(column.ref ?? "")}. Delete and re-add the column to link elsewhere.`;
+    if (column?.type === "formula" || column?.type === "rollup") return "Worked out by Zenin on every record; nobody types it.";
     if (fixedType) return `${columnTypeInfo(column!.type).label} columns keep their type. Delete and re-add the column to change it.`;
     if (convertingToChoice(form.values.type)) {
       return "The options are made from the values already in this column. You can rename, recolour or remove them afterwards.";
@@ -383,6 +390,8 @@ export function ColumnModal({
               }}
             />
           </SimpleGrid>
+
+          {editing && column && <FormulaSwitch table={table} column={column} onDone={onClose} />}
 
           {form.values.type === "relation" && !editing && (
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -547,5 +556,62 @@ export function ColumnModal({
         </Stack>
       </form>
     </Modal>
+  );
+}
+
+// Editing a field: "Make it a formula…" for a typed Number / Date / Text
+// field; "Change back" for one that was made a formula (schema/convert.ts).
+function FormulaSwitch({ table, column, onDone }: { table: string; column: SchemaColumn; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [making, setMaking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const computed = column.type === "formula" || column.type === "rollup";
+  const conversion = useQuery({
+    queryKey: ["conversion", table, column.name],
+    queryFn: async () => (await getConversion(table, column.name)).data.conversion,
+    enabled: computed,
+  });
+  const label = column.label || column.name;
+
+  if (CAN_BE_FORMULA.includes(column.type)) {
+    return (
+      <Group gap={6} wrap="wrap">
+        <IconMathFunction size={16} color="var(--mantine-color-dimmed)" />
+        <Text size="sm" c="dimmed">
+          Should Zenin work {label} out from other fields?
+        </Text>
+        <Button size="compact-sm" variant="subtle" onClick={() => setMaking(true)}>
+          Make it a formula…
+        </Button>
+        {making && <MakeFormulaModal table={table} column={column as unknown as RecordColumn} onClose={() => setMaking(false)} onDone={onDone} />}
+      </Group>
+    );
+  }
+  const was = conversion.data;
+  if (!computed || !was) return null;
+  const changeBack = async () => {
+    setBusy(true);
+    try {
+      const { data } = await changeBackColumn(table, column.name);
+      for (const key of [["schema", table], ["tableData", table], ["sheet", table], ["sheet-totals", table], ["conversion", table]]) void qc.invalidateQueries({ queryKey: key });
+      notifications.show({ color: "green", message: `${label} is a ${columnTypeInfo(was.from).label} field again${data.changed ? `; ${data.changed} old value${data.changed === 1 ? "" : "s"} put back` : ""}` });
+      onDone();
+    } catch (err) {
+      notifications.show({ title: "Couldn't change it back", message: errorMessage(err), color: "red" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Alert variant="light" color="gray" icon={<IconMathFunction size={18} />} title={`Made a formula from a ${columnTypeInfo(was.from).label} field`}>
+      <Group justify="space-between" gap="xs" wrap="wrap">
+        <Text size="sm">
+          Change back: people type it again{was.changed ? `, and the ${was.changed} value${was.changed === 1 ? "" : "s"} the formula changed come back` : ""}.
+        </Text>
+        <Button size="xs" variant="default" loading={busy} onClick={changeBack}>
+          Change back
+        </Button>
+      </Group>
+    </Alert>
   );
 }

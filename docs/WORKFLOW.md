@@ -472,6 +472,30 @@ A **Formula** column is worked out from the record's other fields:
 - **Values sent for formula columns are ignored** (API, CSV). The column
   settings check the formula live as you type
   (`POST /api/schema/:t/formula/check`), with its value on the latest record.
+- **Make it a formula** (`schema/convert.ts`): a typed Number, Date or Text
+  field becomes a formula **for the whole column**, in place (never one
+  cell's own formula: totals, reports and other screens must be able to
+  trust a column). Opened from its column settings ("Make it a formula…")
+  or by pressing **=** on a cell in the spreadsheet (admins). One window,
+  `MakeFormulaModal`, with the usual formula box:
+  - `POST /schema/:t/column/:c/convert/check { expression }`: on **every**
+    record, how many fit, how many differ (up to 10 shown, now → becomes)
+    and how many empty ones it fills (`prove()`: the formula engine's own
+    SQL against the stored values). The result type must match the field
+    (a Text field takes any).
+  - `POST …/convert { expression }`: `replaceColumn()` in `schemaRepo.ts`
+    changes the column in place, skipping the usual "can't change to a
+    formula" rule. In the same transaction, the values it replaces (and the
+    empty ones it fills) go into `column_conversions` (migration 023) with the
+    column as it was: at most 5,000, or it's refused. Then formulas and
+    totals are worked out again as for any column change. Audit:
+    `update column`.
+  - **Change back** (`DELETE …/convert`, shown in the column settings while
+    `GET …/convert` finds one): the column as it was (keeping today's label
+    and who sees it), and the kept values go back. Records changed since keep
+    today's values. Deleting the column or table forgets it.
+  - "Use it" on a rule found in imported data (Bring your data) is the same
+    code.
 
 ### Line items (edited inside the parent record)
 
@@ -921,6 +945,17 @@ table → Access → **Spreadsheet view** (`table_schemas.spreadsheet`;
 `PUT /schema/:table { spreadsheet }`), e.g. for Payslips. There's no separate "who may use
 it": people see and change what their level allows, and hidden fields never
 appear. Phones don't get it (`?view=sheet` falls back to the list).
+- **Totals row** at the bottom: how many records match the search and
+  filters, and the sum of each number field (formulas and totals too), over
+  **every** matching record, not just the page
+  (`GET /table/:t/totals?search=&filters=`, the summary view's filtering and
+  permissions; fields hidden from the person aren't added up). Fetched again
+  whenever the rows are.
+- **= on a cell** (in select mode): admins get "Make … a formula" for that
+  column (Number, Date, Text), or its column settings when it's already a
+  formula or total. Others get a note: ask an admin. Nothing is ever saved
+  as "=…" text.
+- **Add column** (admins), next to Add row: the usual column window.
 - **Pinned columns** stay on the left while scrolling sideways (react-data-grid
   `frozen`). Each header has a pin button (shown on hover; always on touch
   screens and when pinned): **Pin this column** / **Unpin**. A pinned column
@@ -1085,17 +1120,13 @@ code we never get, but the data still shows them. When an import finishes,
   rules. Measured: about 1 s for 5,000 records and 1.5 s for 50,000 (12 number
   fields).
 - **Use it** (`GET /migration/:id/rules/:rule` checks again on today's records
-  with up to 10 that would change; `POST …/use`): `replaceColumn()` in
-  `schemaRepo.ts` turns the field into a formula (or roll-up) in place,
-  skipping the usual "can't change to formula" rule. Inside the same
-  transaction, the values it will change (and the empty ones it fills) are
-  kept on the rule (`restore`, at most 5,000, or it's refused), with the
-  column as it was (`original`). Then formulas and totals are worked out
-  again as for any column change. Audit: `update column`.
-- **Change back** (`POST …/undo`): the column as it was (keeping today's
-  label), and the kept values go back. Records that changed since keep
-  today's values. `POST /migration/:id/rules` looks again and keeps the
-  rules in use. The page never gets `restore` or `original`.
+  with up to 10 that would change; `POST …/use`) and **Change back**
+  (`POST …/undo`) are "Make it a formula" (Formula columns, above) with the
+  rule's formula or roll-up: `checkConversion()`, `convertColumn()`,
+  `changeBack()` in `schema/convert.ts`. A rule shows as in use while its
+  field has a `column_conversions` row, so Change back in the column
+  settings shows here too. `POST /migration/:id/rules` looks again and keeps
+  the rules in use.
 
 ### Changing many records at once (bulk update)
 

@@ -209,3 +209,6 @@ export const httpStatus = (error: unknown) =>
 // accepts the same types (BULK_UPDATE_TYPES in controllers/records.ts).
 const BULK_TYPES = ["text", "number", "date", "boolean", "relation", "user", "department", "choice", "textarea"];
 export const bulkFields = (columns: RecordColumn[]) => columns.filter((c) => BULK_TYPES.includes(c.type) && !c.inline);
+
+// fields that can be made a formula for the whole column (Make it a formula)
+export const CAN_BE_FORMULA = ["number", "date", "text"];

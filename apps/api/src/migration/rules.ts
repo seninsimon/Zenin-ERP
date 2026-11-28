@@ -1,10 +1,9 @@
-import type pg from "pg";
 import { dataTable } from "../db/dataTables.js";
-import { query, quoteLiteral } from "../db/pool.js";
-import { HttpError } from "../lib/http.js";
-import { pickDisplayField, valueType } from "../schema/columns.js";
+import { query } from "../db/pool.js";
+import { valueType } from "../schema/columns.js";
+import { asComputed, changeBack, checkConversion, conversions, convertColumn, prove, type Computed } from "../schema/convert.js";
 import { computedSql } from "../schema/formula.js";
-import { getSchema, replaceColumn } from "../schema/schemaRepo.js";
+import { getSchema } from "../schema/schemaRepo.js";
 import type { Column, RollupConfig, TableSchema } from "../types.js";
 
 // Bring your data, part 4 (docs/WORKFLOW.md): the calculations the old
@@ -34,10 +33,8 @@ export type Rule = {
   fits: number;
   differ: number;
   fills: number; // empty now; the rule would fill them
+  // in use now: worked out by Zenin (shownRules)
   used: boolean;
-  // while in use, for Change back (never sent to the browser)
-  original?: Column;
-  restore?: Record<string, unknown>; // record id -> the value the rule replaced (null: was empty)
 };
 
 const FIT = 0.98;
@@ -45,8 +42,6 @@ const MIN_ROWS = 10;
 const SAMPLE = 2_000;
 const MAX_INPUTS = 25;
 const MAX_RULES = 40;
-// records a rule may change and still be undone
-export const MAX_RESTORE = 5_000;
 const DAY = 86_400_000;
 
 const label = (c: Column) => c.label || c.name;
@@ -410,40 +405,9 @@ function choose(candidates: Candidate[]): Candidate[] {
   return [...chosen.values()];
 }
 
-/* ---------------- proof, on every record ---------------- */
-
-// the field as a formula or total (not saved)
-function asComputed(column: Column, rule: Pick<Rule, "kind" | "expression" | "rollup">): Column {
-  const made: Column = { ...column, required: false };
-  delete made.default;
-  if (rule.kind === "total") return { ...made, type: "rollup", rollup: { ...rule.rollup!, type: "number" } };
-  return { ...made, type: "formula", formula: { expression: rule.expression! } };
-}
-
-// SQL for the stored value (s) and the rule's value (c) of a record t
-function sides(target: Column, computed: Column, columns: Column[]) {
-  const { sql, type } = computedSql(computed, columns);
-  const key = quoteLiteral(target.name);
-  if (type === "number") return { s: `round(erp_try_numeric(t.data ->> ${key}), 6)`, c: `round((${sql})::numeric, 6)`, shown: (x: string) => `trim_scale(${x})::text` };
-  if (type === "date") return { s: `erp_try_date(t.data ->> ${key})`, c: `(${sql})`, shown: (x: string) => `to_char(${x}, 'YYYY-MM-DD')` };
-  return { s: `NULLIF(t.data ->> ${key}, '')`, c: `NULLIF(${sql}, '')`, shown: (x: string) => x };
-}
-
-type Proof = { checked: number; fits: number; differ: number; fills: number };
-
-async function prove(schema: TableSchema, target: Column, computed: Column, client?: pg.PoolClient): Promise<Proof> {
-  const { s, c } = sides(target, computed, schema.columns);
-  const { rows } = await query<Proof>(
-    `SELECT count(*) FILTER (WHERE s IS NOT NULL)::int AS checked,
-            count(*) FILTER (WHERE s IS NOT NULL AND s = c)::int AS fits,
-            count(*) FILTER (WHERE s IS NOT NULL AND c IS DISTINCT FROM s)::int AS differ,
-            count(*) FILTER (WHERE s IS NULL AND c IS NOT NULL)::int AS fills
-       FROM (SELECT ${s} AS s, ${c} AS c FROM ${dataTable(schema.tableName)} t) x`,
-    [],
-    client
-  );
-  return rows[0];
-}
+// the rule as a conversion (schema/convert.ts)
+const defOf = (r: Pick<Rule, "kind" | "expression" | "rollup">): Computed =>
+  r.kind === "total" ? { kind: "total", rollup: r.rollup! } : { kind: "formula", expression: r.expression! };
 
 /* ---------------- public ---------------- */
 
@@ -468,7 +432,7 @@ export async function findRules(tableNames: string[]): Promise<Rule[]> {
     const schema = schemas.find((s) => s.tableName === c.table)!;
     const target = schema.columns.find((col) => col.name === c.target)!;
     try {
-      const proof = await prove(schema, target, asComputed(target, c));
+      const proof = await prove(schema, target, asComputed(target, defOf(c)));
       if (proof.checked < MIN_ROWS || proof.fits < proof.checked * FIT) continue;
       rules.push({
         id: `${c.table}.${c.target}`,
@@ -490,91 +454,18 @@ export async function findRules(tableNames: string[]): Promise<Rule[]> {
   return rules;
 }
 
-const fieldNow = async (rule: Rule) => {
-  const schema = await getSchema(rule.table);
-  const column = schema?.columns.find((c) => c.name === rule.column);
-  if (!schema || !column) throw new HttpError(404, "That field isn't in the table any more");
-  return { schema, column };
-};
-
 // Check a rule again on today's records, with some records it would change
-export async function checkRule(rule: Rule) {
-  const { schema, column } = await fieldNow(rule);
-  if (rule.used) return { proof: null, examples: [] };
-  if (column.type !== rule.type) throw new HttpError(409, `"${label(column)}" has changed since: it isn't a ${rule.type} field any more`);
-  const computed = asComputed(column, rule);
-  const proof = await prove(schema, column, computed);
-  const { s, c, shown } = sides(column, computed, schema.columns);
-  const name = pickDisplayField(schema);
-  const { rows } = await query<{ id: string; title: string | null; now: string | null; becomes: string | null }>(
-    `SELECT t._id AS id, ${name === "_id" ? "t._id" : `t.data ->> ${quoteLiteral(name)}`} AS title,
-            t.data ->> ${quoteLiteral(column.name)} AS now, ${shown(c)} AS becomes
-       FROM ${dataTable(schema.tableName)} t
-      WHERE ${s} IS NOT NULL AND ${c} IS DISTINCT FROM ${s}
-      ORDER BY t.created_at LIMIT 10`
-  );
-  return { proof, examples: rows };
-}
+export const checkRule = (rule: Rule) => checkConversion(rule.table, rule.column, defOf(rule));
 
-// Use a rule: the field becomes a formula (or total). The values it changes
-// are kept on the rule, so Change back can put them back.
-export async function useRule(rule: Rule): Promise<{ rule: Rule; changed: number }> {
-  const { column } = await fieldNow(rule);
-  if (rule.used) throw new HttpError(409, "This rule is already in use");
-  if (column.type !== rule.type) throw new HttpError(409, `"${label(column)}" has changed since: it isn't a ${rule.type} field any more`);
-  let restore: Record<string, unknown> = {};
-  const { before } = await replaceColumn(
-    rule.table,
-    rule.column,
-    (current) => asComputed(current, rule),
-    async (client, columns) => {
-      const made = columns.find((c) => c.name === rule.column)!;
-      const { s, c } = sides(column, made, columns);
-      const { rows } = await query<{ id: string; v: unknown }>(
-        `SELECT t._id AS id, t.data -> ${quoteLiteral(rule.column)} AS v FROM ${dataTable(rule.table)} t
-          WHERE (${s} IS NOT NULL AND ${c} IS DISTINCT FROM ${s}) OR (${s} IS NULL AND ${c} IS NOT NULL)
-          LIMIT ${MAX_RESTORE + 1}`,
-        [],
-        client
-      );
-      if (rows.length > MAX_RESTORE) {
-        throw new HttpError(409, `More than ${MAX_RESTORE.toLocaleString("en-IN")} records would change: too many to undo. Fix the old values first.`);
-      }
-      restore = Object.fromEntries(rows.map((r) => [r.id, r.v ?? null]));
-    }
-  );
-  return { rule: { ...rule, used: true, original: before, restore }, changed: Object.keys(restore).length };
-}
+// Use a rule: the field becomes a formula (or total); Change back undoes it
+export const useRule = (rule: Rule, userId: string | null) => convertColumn(rule.table, rule.column, defOf(rule), userId);
+export const undoRule = (rule: Rule) => changeBack(rule.table, rule.column);
 
-// Change back: a normal field again; the values the rule changed come back
-export async function undoRule(rule: Rule): Promise<Rule> {
-  const { column } = await fieldNow(rule);
-  if (!rule.used || !rule.original) throw new HttpError(409, "This rule isn't in use");
-  if (column.type !== "formula" && column.type !== "rollup") throw new HttpError(409, `"${label(column)}" isn't worked out by a rule any more`);
-  const key = quoteLiteral(rule.column);
-  await replaceColumn(
-    rule.table,
-    rule.column,
-    (current) => ({ ...rule.original!, label: current.label, showInTable: current.showInTable, onlyLevels: current.onlyLevels }),
-    async (client) => {
-      if (!Object.keys(rule.restore ?? {}).length) return;
-      await query(
-        `UPDATE ${dataTable(rule.table)} t
-            SET data = CASE WHEN jsonb_typeof(s.value) = 'null' THEN t.data - ${key} ELSE t.data || jsonb_build_object(${key}, s.value) END
-           FROM jsonb_each($1::jsonb) s WHERE t._id = s.key`,
-        [JSON.stringify(rule.restore)],
-        client
-      );
-    }
-  );
-  const back: Rule = { ...rule, used: false };
-  delete back.original;
-  delete back.restore;
-  return back;
+// what the page gets: whether each is in use now (made a formula, not changed back)
+export async function shownRules(rules: Rule[]) {
+  const now = await conversions([...new Set(rules.map((r) => r.table))]);
+  return rules.map((r) => {
+    const conv = now.find((c) => c.table_name === r.table && c.column_name === r.column);
+    return { ...r, used: Boolean(conv), changed: conv?.changed ?? 0 };
+  });
 }
-
-// what the page gets: no undo data
-export const shownRule = (r: Rule) => {
-  const { original: _o, restore, ...rest } = r;
-  return { ...rest, changed: restore ? Object.keys(restore).length : 0 };
-};

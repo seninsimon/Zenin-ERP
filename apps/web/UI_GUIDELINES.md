@@ -398,10 +398,12 @@ Formatting helpers live in `src/lib/format.ts`.
   box: records as links with one line of details and "Open all N →", totals
   as a small table with an "All" row and "Open as a chart →". Never put
   these values into the AI's sentence.
-- **Turning something Zenin found into a setting** ("Use it" on a rule found
-  in imported data): check again first and show, in the window, how much fits
-  and the records that would change (now → becomes), then one named button
-  ("Use this rule"). Say how to undo it. No confirm for the undo itself.
+- **Turning a typed field into a formula** (Make it a formula, "Use it" on a
+  rule found in imported data): check on every record first and show, in the
+  window, how much fits and the records that would change (now → becomes)
+  with `ChangePreview`, then one named button ("Make it a formula", "Use this
+  rule"). Say how to undo it (Change back). No confirm for the undo itself.
+  Formulas are always for a whole column, never one cell's own.
 - **Modal layout:** the title says the task ("Add column"). Buttons sit
   bottom-right: Cancel, then the primary action named for the task ("Add
   column", not "OK"). On phones, modals are full screen.
@@ -562,7 +564,7 @@ Target: **WCAG 2.2 AA**.
 | Record values | `FieldValue` |
 | Nothing to show | `EmptyState` |
 | Explain an idea that isn't obvious | `HelpTip` / `WithHelp`, text in `lib/help.ts` (§9) |
-| Editing many records like a spreadsheet | `SpreadsheetView` (react-data-grid): Zenin's colours through the `--rdg-*` variables (`spreadsheet.module.css`), `rdg-dark` / `rdg-light` from the colour scheme, the form's `FieldInput` as the cell editor, per-cell states (saving, saved, error) as cell classes, one clash banner at a time; a pin button in each header (on hover, always when pinned or on touch screens) pins up to 3 columns to the left, kept per person in the browser; a change to many cells (paste, fill, Delete on a block) says so in a message with an **Undo** button, and Ctrl+Z undoes the last change |
+| Editing many records like a spreadsheet | `SpreadsheetView` (react-data-grid): Zenin's colours through the `--rdg-*` variables (`spreadsheet.module.css`), `rdg-dark` / `rdg-light` from the colour scheme, the form's `FieldInput` as the cell editor, per-cell states (saving, saved, error) as cell classes, one clash banner at a time; a totals row at the bottom (every matching record, `GET /table/:t/totals`); = on a cell opens Make it a formula (admins); Add column next to Add row (admins); a pin button in each header (on hover, always when pinned or on touch screens) pins up to 3 columns to the left, kept per person in the browser; a change to many cells (paste, fill, Delete on a block) says so in a message with an **Undo** button, and Ctrl+Z undoes the last change |
 | Settings for many things × many options (access levels) | One thing at a time (a list on the left, a dropdown on phones), a grid with a sticky first column and `scope="col"` headers, changed cells outlined, one save bar with a count (`AccessLevelsPage.tsx`) |
 | Delete/disable confirmation | `confirmDanger` |
 | Dates, numbers, file names | `lib/format.ts` |

@@ -8,7 +8,7 @@ import { HttpError } from "../lib/http.js";
 import { currentUser } from "../middleware/auth.js";
 import { getRecordsByIds, recordConditions } from "../repo/recordRepo.js";
 import { departmentNames, getUserOptionsByIds, userLabel } from "../repo/userRepo.js";
-import { pickDisplayField } from "../schema/columns.js";
+import { pickDisplayField, valueType } from "../schema/columns.js";
 import { parseFilters } from "../schema/filters.js";
 import { getSchema } from "../schema/schemaRepo.js";
 import type { Column, CurrentUser, TableSchema } from "../types.js";
@@ -188,5 +188,40 @@ async function labelsFor(user: CurrentUser, schema: TableSchema, column: Column,
     }
     default:
       return new Map();
+  }
+}
+
+// GET /table/:collection/totals?search=&filters=: the spreadsheet's totals
+// row: how many records match, and the sum of each number field the person
+// may see, over every matching record (not just one page).
+export async function totalsHandler(req: Request, res: Response) {
+  const user = currentUser(req);
+  const schema = await loadTable(req, "view");
+  const filters = parseFilters(req.query.filters, schema, user);
+  const hidden = hiddenColumns(user, schema);
+  assertCanUse(user, schema, filters.map((f) => f.field));
+  const numbers = schema.columns.filter((c) => valueType(c) === "number" && !hidden.has(c.name)).slice(0, 60);
+  const params: unknown[] = [];
+  const where = recordConditions(
+    schema,
+    { scope: recordScope(user, schema), search: typeof req.query.search === "string" ? req.query.search.slice(0, 200) : "", filters, hide: [...hidden] },
+    params
+  );
+  const sums = numbers.map(
+    (c, i) => `sum(CASE WHEN jsonb_typeof(t.data -> ${quoteLiteral(c.name)}) = 'number' THEN (t.data ->> ${quoteLiteral(c.name)})::numeric END) AS s${i}`
+  );
+  try {
+    const { rows } = await query<Record<string, string | number | null>>(
+      `SELECT count(*)::int AS count${sums.length ? `, ${sums.join(", ")}` : ""} FROM ${dataTable(schema.tableName)} t WHERE ${where}`,
+      params
+    );
+    const row = rows[0];
+    res.json({
+      count: Number(row.count),
+      sums: Object.fromEntries(numbers.map((c, i) => [c.name, row[`s${i}`] === null ? null : Number(row[`s${i}`])])),
+    });
+  } catch (error) {
+    if (!isMissingTable(error)) throw error;
+    res.json({ count: 0, sums: {} });
   }
 }

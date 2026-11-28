@@ -85,6 +85,7 @@ import {
 import { useAppCrumb } from "../../features/apps/appMenu";
 import { LiveChangeBar } from "../../features/live/LiveChangeBar";
 import { useLiveChanges } from "../../features/live/live";
+import { ColumnModal, type SchemaColumn } from "../settings/ColumnModal";
 
 // an icon and a word, the word hidden on phones (still read out by screen readers)
 const ViewLabel = ({ icon: I, text }: { icon: Icon; text: string }) => (
@@ -133,6 +134,8 @@ export default function RecordListPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { isAdmin } = useCurrentUser();
+  // the spreadsheet's Add column, and = on a formula column (admins)
+  const [columnEdit, setColumnEdit] = useState<{ column: RecordColumn | null } | null>(null);
   const title = tableTitle(table);
   const storageKey = `records:${table}`;
 
@@ -720,6 +723,7 @@ export default function RecordListPage() {
                 filters={url.filters}
                   sort={url.sort?.id}
                   order={url.sort ? (url.sort.desc ? "desc" : "asc") : undefined}
+                  onColumnSettings={isAdmin ? (column) => setColumnEdit({ column }) : undefined}
                 />
               </Suspense>
             )}
@@ -727,6 +731,15 @@ export default function RecordListPage() {
         </Box>
       )}
 
+      {schema && columnEdit && (
+        <ColumnModal
+          opened
+          onClose={() => setColumnEdit(null)}
+          table={table}
+          column={columnEdit.column as SchemaColumn | null}
+          existingNames={schema.columns.map((c) => c.name)}
+        />
+      )}
       {schema && bulkEdit && (
         <BulkUpdateModal
           table={table}

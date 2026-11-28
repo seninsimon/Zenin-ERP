@@ -98,7 +98,7 @@ export default function EmailSettingsPage() {
 
   if (isLoading || !data || !form) {
     return (
-      <Page title="Email" breadcrumbs={[{ label: "Administration" }, { label: "Email" }]}>
+      <Page title="Email" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Email" }]}>
         <PageHeader title="Email" />
       </Page>
     );
@@ -107,7 +107,7 @@ export default function EmailSettingsPage() {
   const s = data.settings;
 
   return (
-    <Page title="Email" breadcrumbs={[{ label: "Administration" }, { label: "Email" }]}>
+    <Page title="Email" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Email" }]}>
       <PageHeader
         title="Email"
         description="Notifications, password links and the morning summary, by email. People choose how often in My profile."

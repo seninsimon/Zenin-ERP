@@ -1,5 +1,5 @@
 // Standard prices in US dollars per million tokens, for the estimates in
-// Administration → AI (checked on the providers' pricing pages, 2026-11-13).
+// Settings → AI (checked on the providers' pricing pages, 2026-11-13).
 // Thinking/reasoning tokens are billed as output. The provider's bill is the
 // truth: discounts, free tiers and taxes aren't known here.
 

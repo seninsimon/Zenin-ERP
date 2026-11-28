@@ -8,7 +8,7 @@ import { Page, PageHeader, Section } from "../../components/ui/Page";
 
 type ChatSettings = { teamChat: boolean; directMessages: boolean; comments: boolean };
 
-// Administration → Chat: three switches, saved as you flip them.
+// Settings → Chat: three switches, saved as you flip them.
 export default function ChatSettingsPage() {
   const qc = useQueryClient();
   const { data } = useQuery({
@@ -27,7 +27,7 @@ export default function ChatSettingsPage() {
   });
 
   return (
-    <Page title="Chat" breadcrumbs={[{ label: "Administration" }, { label: "Chat" }]} width="wide">
+    <Page title="Chat" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Chat" }]} width="wide">
       <PageHeader
         title="Chat"
         description="Talk where the work is. Chat messages aren't emailed; comment mentions follow each person's email choice."

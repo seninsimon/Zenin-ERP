@@ -16,7 +16,7 @@ import { link, recordLink, renderEmail, type Section } from "./render.js";
 import { getMailSettings } from "./settings.js";
 import { brandName } from "../branding.js";
 
-// The morning summary: once a day, at the hour set in Administration → Email
+// The morning summary: once a day, at the hour set in Settings → Email
 // (in its time zone), one email per person with what needs them:
 //   - the apps' reminders ("Your tasks due by tomorrow, or overdue",
 //     "Overdue invoices" for billing managers, …);

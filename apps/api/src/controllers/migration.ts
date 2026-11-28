@@ -24,14 +24,14 @@ import {
   type Migration,
 } from "../migration/store.js";
 
-// Administration → Bring your data (docs/WORKFLOW.md). Admins only (routes).
+// Settings → Bring your data (docs/WORKFLOW.md). Admins only (routes).
 // Off by default; while off, everything but the switch is refused.
 
 const MAX_FILES = 20;
 const TYPES: PlanType[] = ["text", "textarea", "number", "date", "boolean", "choice", "relation"];
 
 async function requireOn() {
-  if (!(await migrationEnabled())) throw new HttpError(403, "Bring your data is switched off. Turn it on in Administration → Bring your data.");
+  if (!(await migrationEnabled())) throw new HttpError(403, "Bring your data is switched off. Turn it on in Settings → Bring your data.");
 }
 
 // what the page gets: the plan, the proof, and the progress while importing
@@ -195,7 +195,7 @@ export async function importHandler(req: Request, res: Response) {
 export async function explainHandler(req: Request, res: Response) {
   const m = await loadOne(req);
   if (!m.plan.logic?.length) throw new HttpError(400, "This upload has no procedures, functions, triggers or views");
-  if (!(await featureOn("migrationAi"))) throw new HttpError(400, 'Set up AI first: Administration → AI, with "Explain old-system logic" on');
+  if (!(await featureOn("migrationAi"))) throw new HttpError(400, 'Set up AI first: Settings → AI, with "Explain old-system logic" on');
   const user = currentUser(req);
   const logic = await explainLogic(m.plan, { _id: user._id, isAdmin: isAdmin(user) });
   await updateMigration(m._id, { plan: { ...m.plan, logic } });

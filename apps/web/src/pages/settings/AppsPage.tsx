@@ -444,7 +444,7 @@ function DraftAiModal({
         </Stack>
       ) : (
         <Stack align="flex-start">
-          <Text size="sm">To use this, choose an AI (Claude, Gemini or ChatGPT) in Administration → AI, paste its key and switch on Draft apps.</Text>
+          <Text size="sm">To use this, choose an AI (Claude, Gemini or ChatGPT) in Settings → AI, paste its key and switch on Draft apps.</Text>
           <Button variant="light" component={Link} to="/settings/ai" leftSection={<IconSparkles size={16} />}>
             Set up AI
           </Button>
@@ -508,7 +508,7 @@ export default function AppsPage() {
   );
 
   return (
-    <Page title="Manage apps" breadcrumbs={[{ label: "Administration" }, { label: "Manage apps" }]}>
+    <Page title="Manage apps" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Manage apps" }]}>
       <PageHeader
         title="Manage apps"
         help="apps"

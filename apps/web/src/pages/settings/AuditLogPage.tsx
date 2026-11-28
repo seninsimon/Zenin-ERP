@@ -139,7 +139,7 @@ function EntryDrawer({
 
 /* ---------------- page ---------------- */
 
-// Administration → Audit log: who did what, when.
+// Settings → Audit log: who did what, when.
 export default function AuditLogPage() {
   const [url, setUrl] = useTableUrlState<AuditFilters>();
   const filters: AuditFilters = url.filters[0] ?? {};
@@ -344,7 +344,7 @@ export default function AuditLogPage() {
   );
 
   return (
-    <Page title="Audit log" breadcrumbs={[{ label: "Administration" }, { label: "Audit log" }]} width="wide">
+    <Page title="Audit log" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Audit log" }]} width="wide">
       <PageHeader
         title="Audit log"
         description="Every change, sign-in and setting update, newest first."

@@ -54,7 +54,7 @@ export const env = {
   // in docker a separate "worker" service runs it)
   runWorker: bool("RUN_WORKER", true),
 
-  // Email is set up in the app (Administration → Email). MAIL_TRANSPORT=memory
+  // Email is set up in the app (Settings → Email). MAIL_TRANSPORT=memory
   // keeps emails in memory instead of sending them (tests).
   mailTransport: str("MAIL_TRANSPORT", "smtp") as "smtp" | "memory",
 };

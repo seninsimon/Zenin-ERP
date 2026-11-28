@@ -28,7 +28,7 @@ const PROVIDERS: Record<Provider, { name: string; company: string; keyUrl: strin
   openai: { name: "ChatGPT", company: "OpenAI", keyUrl: "https://platform.openai.com/api-keys", keyPage: "OpenAI Platform → API keys" },
 };
 
-// Administration → AI (Beta): the provider and its key, the AI features, usage and limits.
+// Settings → AI (Beta): the provider and its key, the AI features, usage and limits.
 export default function AiSettingsPage() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["ai"], queryFn: async () => (await api.get<AiSettings>("/ai")).data });
@@ -69,7 +69,7 @@ export default function AiSettingsPage() {
 
   if (!data) {
     return (
-      <Page title="AI" breadcrumbs={[{ label: "Administration" }, { label: "AI" }]} width="wide">
+      <Page title="AI" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "AI" }]} width="wide">
         <Center h={200}>
           <Loader />
         </Center>
@@ -95,7 +95,7 @@ export default function AiSettingsPage() {
     });
 
   return (
-    <Page title="AI" breadcrumbs={[{ label: "Administration" }, { label: "AI" }]} width="wide">
+    <Page title="AI" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "AI" }]} width="wide">
       <PageHeader
         title={
           <Group gap="xs">

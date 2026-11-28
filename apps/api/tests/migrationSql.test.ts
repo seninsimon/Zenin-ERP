@@ -152,7 +152,7 @@ DELIMITER ;
       [`month_end_${tag}x`, "none", true, true], // "none" always needs a person
     ]);
     expect(explained.plan.logic![0].suggestion).toMatch(/when Paid becomes Yes/);
-    // switched off in Administration → AI
+    // switched off in Settings → AI
     await admin.put("/api/ai", { features: { migrationAi: false } }).expect(200);
     expect((await admin.post(`/api/migration/${m._id}/explain`)).status).toBe(400);
     await admin.put("/api/ai", { features: { migrationAi: true } }).expect(200);

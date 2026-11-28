@@ -171,7 +171,7 @@ export async function sendPasswordLinkHandler(req: Request, res: Response) {
   if (!person) throw new HttpError(404, "User not found");
   if (!person.email) throw new HttpError(400, "They have no email address: add one first");
   if (!person.isActive) throw new HttpError(400, "Their account is disabled");
-  if (!(await mailEnabled())) throw new HttpError(400, "Set up email first (Administration → Email)");
+  if (!(await mailEnabled())) throw new HttpError(400, "Set up email first (Settings → Email)");
   const purpose = person.lastLoginAt ? "reset" : "invite";
   if (!(await sendPasswordLink(person, purpose))) throw new HttpError(429, "A few links were sent in the last hour: try again later");
   await audit(req, { action: "password_link", entity: "user", recordId: person._id, changes: { purpose } });

@@ -9,7 +9,7 @@ import { currentUser } from "../middleware/auth.js";
 import { getAiSettings, PROVIDER_NAMES, publicAiSettings, saveAiSettings } from "../ai/settings.js";
 import { audit } from "../repo/auditRepo.js";
 
-// Administration → AI (admins): which AI drafts apps, and its key.
+// Settings → AI (admins): which AI drafts apps, and its key.
 
 // GET /ai
 export async function getAiHandler(_req: Request, res: Response) {

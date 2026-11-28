@@ -46,7 +46,7 @@ import { tableTitle } from "../../layout/nav";
 import { pluralize } from "../../lib/format";
 import classes from "./settings.module.css";
 
-// Administration → Access levels: one app at a time, as a grid. Rows are the
+// Settings → Access levels: one app at a time, as a grid. Rows are the
 // app's tables, columns its levels (Staff, Manager, added ones); each cell is
 // one choice plus "only their own". One Save for the whole app.
 
@@ -525,7 +525,7 @@ export default function AccessLevelsPage() {
   const shown = apps.filter((a) => a.name.toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
-    <Page title="Access levels" breadcrumbs={[{ label: "Administration" }, { label: "Access levels" }]} width="full">
+    <Page title="Access levels" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Access levels" }]} width="full">
       <PageHeader
         title="Access levels"
         help="levels"

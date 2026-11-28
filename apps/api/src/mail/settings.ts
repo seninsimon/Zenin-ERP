@@ -1,7 +1,7 @@
 import { query } from "../db/pool.js";
 import { HttpError, isValidEmail } from "../lib/http.js";
 
-// Email settings, set in the app (Administration → Email), kept in app_state
+// Email settings, set in the app (Settings → Email), kept in app_state
 // under "mail". The password is never sent back to the browser.
 
 export type MailSettings = {

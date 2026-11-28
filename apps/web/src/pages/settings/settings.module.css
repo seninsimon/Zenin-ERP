@@ -90,3 +90,23 @@
 .appRow + .appRow {
   border-top: 1px solid var(--app-border);
 }
+
+/* Settings: one card per setting (icon, name, one line, ›) */
+.settingCard {
+  display: block;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border: 1px solid var(--app-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--app-surface);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.settingCard:hover {
+  border-color: var(--mantine-color-default-border);
+  background: var(--app-muted);
+}
+
+.settingCard:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}

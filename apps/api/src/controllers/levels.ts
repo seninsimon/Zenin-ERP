@@ -3,7 +3,7 @@ import { addLevel, deleteLevel, listLevels, moveOlderRoles, resetLevel, saveLeve
 import { param } from "../lib/http.js";
 import { audit } from "../repo/auditRepo.js";
 
-// Administration → Access levels (admins): what each app's Staff, Manager
+// Settings → Access levels (admins): what each app's Staff, Manager
 // and added levels may do, and moving older roles to levels.
 
 export async function listLevelsHandler(_req: Request, res: Response) {

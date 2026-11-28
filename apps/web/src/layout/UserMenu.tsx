@@ -1,26 +1,20 @@
-import { useState } from "react";
 import {
   Avatar,
   Box,
   CheckIcon,
   ColorSwatch,
   Group,
-  Loader,
   Menu,
-  Modal,
-  Progress,
   SegmentedControl,
-  Stack,
   Text,
   UnstyledButton,
   useMantineColorScheme,
   useMantineTheme,
   type MantineColorScheme,
 } from "@mantine/core";
-import { IconActivity, IconChevronDown, IconLogout, IconSettings, IconUser } from "@tabler/icons-react";
+import { IconChevronDown, IconLogout, IconSettings, IconUser } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 
-import { useSystemHealth } from "../api/reactQueryHooks/useHealth";
 import { useCurrentUser } from "../auth/AuthContext";
 import { fileUrl } from "../lib/format";
 import { usePreferences } from "../lib/preferences";
@@ -35,41 +29,12 @@ export const initialsOf = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-function SystemStatus({ opened, onClose }: { opened: boolean; onClose: () => void }) {
-  const { data, isLoading } = useSystemHealth(opened);
-  const row = (label: string, value: number, detail: string, color: string) => (
-    <Stack gap={4}>
-      <Group justify="space-between">
-        <Text size="sm">{label}</Text>
-        <Text size="sm" c="dimmed" className="tabular-nums">
-          {detail}
-        </Text>
-      </Group>
-      <Progress value={value} color={value > 85 ? "red" : color} aria-label={`${label} ${value}%`} />
-    </Stack>
-  );
-  return (
-    <Modal opened={opened} onClose={onClose} title="System status" size="sm">
-      {isLoading || !data ? (
-        <Loader size="sm" />
-      ) : (
-        <Stack>
-          {row("CPU", Number(data.cpu), `${data.cpu}%`, "blue")}
-          {row("Memory", Number(data.ram), `${data.ramUsed} / ${data.ramTotal} GB`, "teal")}
-          {row("Disk", Number(data.disk), `${data.diskUsed} / ${data.diskTotal} GB`, "grape")}
-        </Stack>
-      )}
-    </Modal>
-  );
-}
-
 export default function UserMenu() {
   const { user, isAdmin, logout } = useCurrentUser();
   const { accent, setPreference } = usePreferences();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const navigate = useNavigate();
-  const [statusOpen, setStatusOpen] = useState(false);
   const name = user.fullName || user.username;
 
   return (
@@ -109,11 +74,8 @@ export default function UserMenu() {
           </Menu.Item>
           {isAdmin && (
             <>
-              <Menu.Item leftSection={<IconSettings size={16} />} onClick={() => navigate("/settings/tables")}>
-                Administration
-              </Menu.Item>
-              <Menu.Item leftSection={<IconActivity size={16} />} onClick={() => setStatusOpen(true)}>
-                System status
+              <Menu.Item leftSection={<IconSettings size={16} />} onClick={() => navigate("/settings")}>
+                Settings
               </Menu.Item>
             </>
           )}
@@ -166,7 +128,6 @@ export default function UserMenu() {
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
-      {isAdmin && <SystemStatus opened={statusOpen} onClose={() => setStatusOpen(false)} />}
     </>
   );
 }

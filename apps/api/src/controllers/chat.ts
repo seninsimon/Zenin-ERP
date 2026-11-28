@@ -276,7 +276,7 @@ export async function searchMessages(req: Request, res: Response) {
   res.json(rows.map((r) => shape(r, user._id)));
 }
 
-// Administration → Chat
+// Settings → Chat
 export async function getChatSettingsHandler(_req: Request, res: Response) {
   res.json(await getChatSettings());
 }

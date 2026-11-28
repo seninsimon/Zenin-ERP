@@ -9,7 +9,7 @@ import type { AppAccessOption } from "../../api/reactQueryHooks/useAdmin";
 import { confirmDanger } from "../../components/ui/confirm";
 import { pluralize } from "../../lib/format";
 
-// Administration → Users → Import people: many logins from one CSV file.
+// Settings → Users → Import people: many logins from one CSV file.
 // Choose a file, Check it (nothing is saved), then Add. Everyone added is a
 // Member; people with an email get the welcome link (when email is set up),
 // the others a temporary password, shown once, which they change at first
@@ -192,7 +192,7 @@ export function ImportPeopleModal({ opened, onClose, apps }: { opened: boolean; 
           </Text>
           {!checked.mailWorks && passwords > 0 && (
             <Text size="xs" c="dimmed">
-              Set up email in Administration → Email, and people with an email address get a welcome email instead.
+              Set up email in Settings → Email, and people with an email address get a welcome email instead.
             </Text>
           )}
           {links > MANY_EMAILS && (

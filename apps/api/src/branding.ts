@@ -3,7 +3,7 @@ import { query } from "./db/pool.js";
 import { HttpError } from "./lib/http.js";
 import { uploadKeyFromUrl } from "./storage.js";
 
-// The organization's name and logo (Administration → Branding), kept in
+// The organization's name and logo (Settings → Branding), kept in
 // app_state under "branding". Shown on the sign-in page, in the sidebar, the
 // browser tab and emails. Default: "Zenin ERP" and a letter mark.
 

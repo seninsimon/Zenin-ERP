@@ -10,7 +10,7 @@ import { Page, PageHeader, Section } from "../../components/ui/Page";
 import { useBranding } from "../../lib/branding";
 import { resizeImage } from "../../lib/images";
 
-// Administration → Branding: the name and logo people see on the sign-in
+// Settings → Branding: the name and logo people see on the sign-in
 // page, in the sidebar, the browser tab and emails.
 export default function BrandingPage() {
   const qc = useQueryClient();
@@ -51,7 +51,7 @@ export default function BrandingPage() {
   };
 
   return (
-    <Page title="Branding" breadcrumbs={[{ label: "Administration" }, { label: "Branding" }]} width="wide">
+    <Page title="Branding" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Branding" }]} width="wide">
       <PageHeader title="Branding" description="Your organization's name and logo: on the sign-in page, in the sidebar, the browser tab and emails." />
       <Stack gap="lg">
         <Section title="Name">

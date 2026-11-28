@@ -3,7 +3,7 @@ import { checkLimits, recordUsage } from "../src/ai/usage.js";
 import { login, unique } from "./helpers.js";
 
 // The admin picks the AI that drafts apps and pastes its
-// key in Administration → AI. The providers are never really called here:
+// key in Settings → AI. The providers are never really called here:
 // fetch is replaced with canned answers.
 const KEY_G = "AIzaTEST-gemini-key-0123456789abcdef";
 const KEY_O = "sk-TEST-openai-key-0123456789abcdef";
@@ -88,7 +88,7 @@ describe("AI settings", async () => {
     answer(401, { error: { message: "Incorrect API key provided" } });
     let res = await admin.post("/api/apps/draft", { description });
     expect(res.status).toBe(503);
-    expect(res.body.message).toBe("ChatGPT refused the API key. Check it in Administration → AI.");
+    expect(res.body.message).toBe("ChatGPT refused the API key. Check it in Settings → AI.");
 
     answer(404, { error: { message: "The model `gpt-0` does not exist" } });
     await admin.put("/api/ai", { provider: "openai", model: "gpt-0" }).expect(200);
@@ -183,7 +183,7 @@ describe("AI settings", async () => {
       geminiDraft();
       const res = await admin.post("/api/apps/draft", { description });
       expect(res.status).toBe(429);
-      expect(res.body.message).toBe("This month's AI limit is reached. An admin can raise it in Administration → AI.");
+      expect(res.body.message).toBe("This month's AI limit is reached. An admin can raise it in Settings → AI.");
       await admin.put("/api/ai", { limits: { monthlyUsd: null } }).expect(200);
     });
 

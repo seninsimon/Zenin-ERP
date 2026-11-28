@@ -8,7 +8,7 @@ import api, { errorMessage } from "../../api/api";
 import { useCurrentUser } from "../../auth/AuthContext";
 
 // Ask Zenin: questions about your records, answered by the AI an admin chose
-// (Administration → AI). It sees only what you can see, and only reads. The
+// (Settings → AI). It sees only what you can see, and only reads. The
 // conversation stays in this browser tab.
 
 type Turn = { role: "user" | "assistant"; content: string; error?: boolean };

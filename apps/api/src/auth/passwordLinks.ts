@@ -25,7 +25,7 @@ const hash = (token: string) => createHash("sha256").update(token).digest("hex")
 export async function sendPasswordLink(person: Pick<CurrentUser, "_id" | "username" | "fullName" | "email" | "isActive">, purpose: Purpose, db?: Db) {
   if (!person.isActive || !person.email || !(await mailEnabled())) return false;
   const base = await link("/set-password");
-  if (!base) throw new HttpError(400, 'Set "Links in emails go to" in Administration → Email first');
+  if (!base) throw new HttpError(400, 'Set "Links in emails go to" in Settings → Email first');
   const { rows: recent } = await query<{ n: number }>(
     `SELECT count(*)::int AS n FROM password_tokens WHERE user_id = $1 AND created_at > now() - interval '1 hour'`,
     [person._id],

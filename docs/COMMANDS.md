@@ -140,7 +140,7 @@ Then give it the old computer's IP in the router.
 
 > ⚠️ **Never load the demo on a server with real data or public access.**
 > All demo users share the password `demo-pass-123`, which is written here.
-> To try one app, use **Administration → Manage apps** and tick the sample
+> To try one app, use **Settings → Manage apps** and tick the sample
 > records instead.
 
 After a wipe, the admin login is `ADMIN_USERNAME` / `ADMIN_PASSWORD` from
@@ -222,7 +222,7 @@ purpose, with time to fix what it finds.
 
 ## 8. Settings without commands
 
-These are set in the ERP, under **Administration**. No `.env` editing.
+These are set in the ERP, under **Settings** (admins: ⚙ Settings at the bottom of the sidebar, or your name → Settings). No `.env` editing.
 
 | What | Where |
 |---|---|
@@ -255,8 +255,8 @@ These are set in the ERP, under **Administration**. No `.env` editing.
 | Public address: error 502 | The tunnel's hostname must be **HTTP** and **`web:80`** |
 | Public address: error 1033 | The server or its internet is down, or the tunnel stopped: `./deploy.sh status`, then `./deploy.sh public` |
 | The free address stopped working | It changed after a restart: `./deploy.sh status` shows the new one |
-| Emails don't arrive | Administration → Email: **Recent emails** says why. Check spam too |
-| AI says the key was refused | Administration → AI: paste a fresh key, then **Test** |
+| Emails don't arrive | Settings → Email: **Recent emails** says why. Check spam too |
+| AI says the key was refused | Settings → AI: paste a fresh key, then **Test** |
 | Disk is full | Lower `BACKUP_KEEP_DAYS`, move `BACKUP_DIR` to a bigger disk, or `sudo docker system prune` |
 | `pnpm dev` can't reach the database after a deploy | Copy `POSTGRES_PASSWORD` from `.env` into `DATABASE_URL` in `apps/api/.env`, then restart `pnpm dev` |
 | Undo a wipe or a mistake | `./deploy.sh restore backups/<folder>` |

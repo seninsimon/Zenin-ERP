@@ -4,7 +4,7 @@ import type { Who } from "../ai/usage.js";
 import { ZENIN_EQUIVALENTS, type LogicItem, type Plan } from "./analyze.js";
 
 // Bring your data, part 3: the old database's stored procedures, functions,
-// triggers and views, explained by the chosen AI (Administration → AI →
+// triggers and views, explained by the chosen AI (Settings → AI →
 // "Explain old-system logic"): what each does in plain English, and what to
 // use in Zenin instead, or "needs a person". Nothing is created from it:
 // it's a checklist for the admin. The SQL is only read, never run.

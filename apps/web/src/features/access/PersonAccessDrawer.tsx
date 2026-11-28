@@ -79,7 +79,7 @@ export function PersonAccessSummary({
             <Group gap="sm" wrap="nowrap" align="flex-start">
               <IconShieldCheck size={22} color="var(--mantine-color-red-6)" />
               <Text size="sm">
-                <b>Administrator:</b> can do everything, in every app and table, including Administration.
+                <b>Administrator:</b> can do everything, in every app and table, including Settings.
               </Text>
             </Group>
           ) : (

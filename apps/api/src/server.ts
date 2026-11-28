@@ -24,9 +24,9 @@ try {
   // installed apps whose blueprint got newer: their new and corrected automations
   const upgraded = await upgradeInstalledApps();
   if (upgraded.length) logger.info({ apps: upgraded }, "updated installed apps");
-  // email settings put in .env fill Administration → Email once
+  // email settings put in .env fill Settings → Email once
   await importMailSettingsFromEnv();
-  // and an ANTHROPIC_API_KEY fills Administration → AI once
+  // and an ANTHROPIC_API_KEY fills Settings → AI once
   await importAiSettingsFromEnv();
   // in docker a separate "worker" service runs jobs (RUN_WORKER=false here)
   const stopWorker = env.runWorker ? await startWorker() : null;

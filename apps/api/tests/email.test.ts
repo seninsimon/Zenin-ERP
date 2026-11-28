@@ -11,7 +11,7 @@ describe("Email", async () => {
   const admin = await login();
   const mailTo = (address: string) => memoryMailbox.filter((m) => m.to === address);
 
-  // settings as an admin saves them in Administration → Email
+  // settings as an admin saves them in Settings → Email
   await admin
     .put("/api/email", { provider: "gmail", user: "office@example.com", pass: "abcd efgh ijkl mnop", fromName: "Zenin ERP", appUrl: "http://erp.local/" })
     .expect(200);

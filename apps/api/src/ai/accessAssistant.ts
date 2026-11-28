@@ -387,7 +387,7 @@ export async function canUseAccessAi(user: CurrentUser) {
 }
 
 export async function askAccess(admin: CurrentUser, rawTurns: unknown): Promise<AccessAnswer> {
-  if (!(await canUseAccessAi(admin))) throw new HttpError(403, "Change access with AI isn't switched on. An admin can switch it on in Administration → AI.");
+  if (!(await canUseAccessAi(admin))) throw new HttpError(403, "Change access with AI isn't switched on. An admin can switch it on in Settings → AI.");
   const turns = cleanTurns(rawTurns);
   const ai = await activeAi();
   if (!ai) throw new HttpError(503, "AI features aren't set up.");

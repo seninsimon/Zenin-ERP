@@ -10,7 +10,7 @@ import { currentUser } from "../middleware/auth.js";
 import { audit } from "../repo/auditRepo.js";
 import { brandName } from "../branding.js";
 
-// Administration → Email (admins only).
+// Settings → Email (admins only).
 
 // GET /email: the settings (never the password), whether it's working, the last emails
 export async function getEmailHandler(_req: Request, res: Response) {
@@ -38,7 +38,7 @@ export async function testEmailHandler(req: Request, res: Response) {
       { label: "Links go to", value: (await getMailSettings()).appUrl || "(not set)" },
     ],
     button: { label: `Open ${brand}`, href: await link("/") },
-    footer: "A test email from Administration → Email.",
+    footer: "A test email from Settings → Email.",
   });
   const id = await queueEmail({ userId: me._id, to: me.email, kind: "test", subject: `Test email from ${brand}`, text, html });
   await processOutbox({ onlyId: id });
@@ -51,7 +51,7 @@ export async function testEmailHandler(req: Request, res: Response) {
 }
 
 // At start-up: email settings that were put in .env (SMTP_HOST, SMTP_USER,
-// SMTP_PASS, MAIL_FROM, APP_URL, …) fill Administration → Email once, while
+// SMTP_PASS, MAIL_FROM, APP_URL, …) fill Settings → Email once, while
 // nothing is saved there yet. After that the app's settings count.
 export async function importMailSettingsFromEnv() {
   const e = process.env;
@@ -72,6 +72,6 @@ export async function importMailSettingsFromEnv() {
     timeZone: e.MAIL_TIMEZONE || "Asia/Kolkata",
     summaryHour: Number(e.MAIL_SUMMARY_HOUR ?? 8),
   });
-  logger.info("email settings copied from .env into Administration → Email; the SMTP_*/MAIL_* lines in .env are no longer needed");
+  logger.info("email settings copied from .env into Settings → Email; the SMTP_*/MAIL_* lines in .env are no longer needed");
   return true;
 }

@@ -166,7 +166,7 @@ async function chatChatGpt({ system, turns, ai, meter, tools: TOOLS, runTool, ma
   return outOfRounds;
 }
 
-// A conversation with tools, with whichever AI is chosen in Administration → AI.
+// A conversation with tools, with whichever AI is chosen in Settings → AI.
 export function chatWithTools(run: Run): Promise<string> {
   return run.ai.provider === "anthropic" ? chatClaude(run) : run.ai.provider === "gemini" ? chatGemini(run) : chatChatGpt(run);
 }

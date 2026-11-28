@@ -13,7 +13,7 @@ import { loadOwnApps } from "./ownApps.js";
 import type { AppBlueprint, ColumnBlueprint } from "./types.js";
 
 // "We're a 12-person dental clinic with two branches" -> the AI chosen in
-// Administration → AI drafts an app
+// Settings → AI drafts an app
 // (tables, columns, links) as structured JSON. The draft is only data: it is
 // turned into a normal blueprint here, checked like every catalog app, and
 // shown in the same preview before anything is created.

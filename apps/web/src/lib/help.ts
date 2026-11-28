@@ -16,7 +16,7 @@ export const HELP = {
   administrator: {
     title: "Administrator",
     text: [
-      "Can do everything: every app, every record, and all of Administration.",
+      "Can do everything: every app, every record, and all of Settings.",
       "Keep it to one or two people. Everyone else gets what they need through App access.",
     ],
   },

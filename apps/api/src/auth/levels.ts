@@ -108,7 +108,7 @@ export type LevelInfo = {
   permissions: PermissionMap;
 };
 
-// Administration → Access levels: every app with its tables and levels, the
+// Settings → Access levels: every app with its tables and levels, the
 // older roles still to move, and how many admins there are.
 export async function listLevels() {
   await loadDraftedApps();
@@ -225,7 +225,7 @@ export async function deleteLevel(appKey: string, level: string) {
     }
   }
   const { rows } = await query<{ value: { askRoles?: string[] } }>(`SELECT value FROM app_state WHERE key = 'ai'`);
-  if (rows[0]?.value?.askRoles?.some((id) => ids.has(id))) throw new HttpError(409, "Ask Zenin is open to this level. Change that in Administration → AI first.");
+  if (rows[0]?.value?.askRoles?.some((id) => ids.has(id))) throw new HttpError(409, "Ask Zenin is open to this level. Change that in Settings → AI first.");
   await query(`DELETE FROM roles WHERE _id = ANY($1::text[])`, [[...ids]]);
   await invalidateSchemas();
 }

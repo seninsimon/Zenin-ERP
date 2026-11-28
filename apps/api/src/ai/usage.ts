@@ -22,7 +22,7 @@ async function thisMonthSpend() {
 export async function checkLimits(who: Who) {
   const { limits } = await getAiSettings();
   if (limits.monthlyUsd !== null && (await thisMonthSpend()) >= limits.monthlyUsd) {
-    throw new HttpError(429, "This month's AI limit is reached. An admin can raise it in Administration → AI.");
+    throw new HttpError(429, "This month's AI limit is reached. An admin can raise it in Settings → AI.");
   }
   if (limits.perPersonDaily !== null && who && !who.isAdmin) {
     const { rows } = await query<{ n: number }>(
@@ -82,7 +82,7 @@ async function warnNearLimit() {
       rows.map((u) => u._id),
       {
         title: reached ? "AI features paused: this month's limit is reached" : "AI spending is at 80% of this month's limit",
-        body: `About $${spent.toFixed(2)} of $${limit.toFixed(2)} so far. See Administration → AI.`,
+        body: `About $${spent.toFixed(2)} of $${limit.toFixed(2)} so far. See Settings → AI.`,
       },
       { email: false }
     )
@@ -109,7 +109,7 @@ async function totals(where: string) {
   };
 }
 
-// Administration → AI → Usage
+// Settings → AI → Usage
 export async function usageOverview() {
   const [month, lastMonth, byFeature, byPerson] = await Promise.all([
     totals(THIS_MONTH),

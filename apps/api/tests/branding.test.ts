@@ -4,7 +4,7 @@ import { memoryMailbox } from "../src/mail/mailer.js";
 import { processOutbox } from "../src/mail/outbox.js";
 import { getApp, login, unique } from "./helpers.js";
 
-// The organization's name and logo (Administration → Branding), and people's
+// The organization's name and logo (Settings → Branding), and people's
 // profile pictures.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 

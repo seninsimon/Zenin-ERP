@@ -7,7 +7,7 @@ import { activeAi, getAiSettings, PROVIDER_NAMES, type Feature, type Provider } 
 import { checkLimits, recordUsage, type Who } from "./usage.js";
 
 // One question, a JSON answer in a given shape, from whichever AI the admin
-// chose (Administration → AI). Every provider gets the same instructions and
+// chose (Settings → AI). Every provider gets the same instructions and
 // the same JSON Schema; the answer is checked again here. Every request is
 // counted (tokens, estimated cost) and the limits are checked first.
 
@@ -36,10 +36,10 @@ export function failed(ai: Ai, status: number, detail: string): HttpError {
   const name = PROVIDER_NAMES[ai.provider];
   logger.error({ provider: ai.provider, model: ai.model, status, detail }, "AI request failed");
   if (status === 401 || status === 403 || (status === 400 && /api key|api_key|unauthori[sz]ed/i.test(detail))) {
-    return new HttpError(503, `${name} refused the API key. Check it in Administration → AI.`, { detail });
+    return new HttpError(503, `${name} refused the API key. Check it in Settings → AI.`, { detail });
   }
   if (status === 404 || (/model/i.test(detail) && /not (found|exist|supported)|does not exist|unknown|invalid/i.test(detail))) {
-    return new HttpError(503, `${name} doesn't offer the model "${ai.model}" to this key. Clear Advanced → Model in Administration → AI to use our pick.`, {
+    return new HttpError(503, `${name} doesn't offer the model "${ai.model}" to this key. Clear Advanced → Model in Settings → AI to use our pick.`, {
       detail,
     });
   }
@@ -170,7 +170,7 @@ async function askChatGpt<T extends z.ZodType>(ai: Ai, ask: Ask<T>, schema: obje
 
 /* ---------------- what the app calls ---------------- */
 
-const notSetUp = () => new HttpError(503, "AI features aren't set up. An admin can add an AI key in Administration → AI.");
+const notSetUp = () => new HttpError(503, "AI features aren't set up. An admin can add an AI key in Settings → AI.");
 
 // Count the request, whatever happens.
 export async function metered<R>(ai: Ai, feature: string, who: Who, run: (meter: Meter) => Promise<R>): Promise<R> {
@@ -198,7 +198,7 @@ export async function metered<R>(ai: Ai, feature: string, who: Who, run: (meter:
 export async function generateJson<T extends z.ZodType>(feature: Feature, who: Who, ask: Ask<T>): Promise<z.infer<T>> {
   const ai = await activeAi();
   if (!ai) throw notSetUp();
-  if (!(await getAiSettings()).features[feature]) throw new HttpError(403, "This AI feature is switched off in Administration → AI.");
+  if (!(await getAiSettings()).features[feature]) throw new HttpError(403, "This AI feature is switched off in Settings → AI.");
   await checkLimits(who);
   const { $schema: _ignored, ...schema } = z.toJSONSchema(ask.schema) as Record<string, unknown>;
   return metered(ai, feature, who, async (meter) => {
@@ -217,7 +217,7 @@ export async function generateJson<T extends z.ZodType>(feature: Feature, who: W
   });
 }
 
-// Administration → AI → Test: one tiny request with the saved key and model.
+// Settings → AI → Test: one tiny request with the saved key and model.
 // It ignores the switches and limits (it's how an admin checks the setup).
 export async function testAi(who: Who): Promise<{ provider: Provider; model: string }> {
   const ai = await activeAi();

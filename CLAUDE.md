@@ -24,7 +24,7 @@ automations without code. Built by one founder in Thrissur, Kerala.
   numbers; label estimates as estimates.
 - **Minimal and not confusing.** One clear way to do each thing. Make the
   design calls yourself and cut confusing options. Say why briefly.
-- **Settings an admin may change belong in Administration screens,** never
+- **Settings an admin may change belong in Settings screens,** never
   in `.env` edits.
 - **Bigger features:** write a short plan in `workspace/` first and get
   approval. Keep each plan's status and decision log up to date.
@@ -90,7 +90,7 @@ automations without code. Built by one founder in Thrissur, Kerala.
   - Open them in the in-app viewer (`openFiles()`), never as a raw
     `/uploads` link in a new tab.
 - **AI features:**
-  - Provider and key are set in Administration → AI.
+  - Provider and key are set in Settings → AI.
   - Claude via the Anthropic SDK; Gemini and OpenAI via REST.
   - Usage and costs are estimated in the `ai_usage` table.
 - **Performance (measured 2026-11-24):** with 160k demo records and 30

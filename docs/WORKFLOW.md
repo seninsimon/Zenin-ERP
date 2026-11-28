@@ -56,9 +56,9 @@ The whole model in three sentences:
 
 | Concept | Decides | Set in |
 |---|---|---|
-| **Administrator** | Everything, including Administration | Users → the person (a switch) |
+| **Administrator** | Everything, including Settings | Users → the person (a switch) |
 | **App access** | Their level in each app: No access / Staff / Manager / an added level | Users → the person |
-| **Access levels** | What each level can do in each table of its app | Administration → Access levels |
+| **Access levels** | What each level can do in each table of its app | Settings → Access levels |
 | **Department** | Which team they're in (and, on "each department" tables, whose records they see) | Users → the person |
 | **Who sees the records** | Per table: everyone with access, or split by department | Tables → the table → Access |
 | **Visible to** | Which departments see one record (only on "each department" tables) | The record form |
@@ -126,7 +126,7 @@ role per part, all with the same `app_level`. A person has a main role
 (**Admin** or **Member**) plus their level roles; rights add up
 (`mergePermissions`: where one role shows the whole table, "own only" extras
 from others are dropped; nobody gets more than one of their roles gave).
-- **Administration → Access levels** (`GET /access-levels`): **one app at a
+- **Settings → Access levels** (`GET /access-levels`): **one app at a
   time, as a grid.** The apps are listed on the left (a list with search from
   nine apps on; a dropdown on phones); `?app=` opens one, and a table's Access
   card links to its app. Rows are the app's tables (the name column stays put
@@ -184,7 +184,7 @@ by default). Admins always see it. The columns list shows a badge.
 
 **Change access with AI** (AI · Beta, admins; `src/ai/accessAssistant.ts`).
 Users → **Tell Zenin what to change**, shown when there's an AI key and the
-"Change access with AI" switch is on (Administration → AI; on by default,
+"Change access with AI" switch is on (Settings → AI; on by default,
 like Draft apps).
 - `POST /ai/access { turns }` → `{ answer, proposal }`. The AI has read-only
   tools (find_people, what_can_they_do, who_can_use, app_levels) and one
@@ -695,7 +695,7 @@ orders Received/Cancelled.
   (`X-Accel-Buffering: no`), with a heartbeat every 25 s. Each stream ends
   after 30 minutes and the browser reconnects, so sign-in is checked again.
 
-**Email** (`src/mail/`, set up in Administration → Email, stored in
+**Email** (`src/mail/`, set up in Settings → Email, stored in
 `app_state` under `mail`; the password never goes back to the browser):
 - **Every bell notification can also be an email.** `notify()` writes it to
   `email_outbox` in the same transaction, so a failed save sends nothing.
@@ -754,7 +754,7 @@ orders Received/Cancelled.
 
 ### Branding and profile pictures
 
-- **Name and logo** (Administration → Branding; `src/branding.ts`,
+- **Name and logo** (Settings → Branding; `src/branding.ts`,
   `app_state` under `branding`):
   - `GET /api/branding` and `GET /api/branding/logo?v=<version>` need no
     sign-in, because the sign-in page shows them.
@@ -773,7 +773,7 @@ orders Received/Cancelled.
 
 ### Comments and team chat
 
-Set up in **Administration → Chat**, three switches stored in `app_state`
+Set up in **Settings → Chat**, three switches stored in `app_state`
 under `chat`: comments on records (on), team chat (off at first), direct
 messages and groups (on). Tables are in migration `014_chat.sql`; the code is in
 `src/controllers/comments.ts`, `src/controllers/chat.ts` and `src/chat/`, and
@@ -980,7 +980,7 @@ appear. Phones don't get it (`?view=sheet` falls back to the list).
 
 ### Bring your data (data migration)
 
-Administration → **Bring your data** (`MigrationPage.tsx`,
+Settings → **Bring your data** (`MigrationPage.tsx`,
 `controllers/migration.ts`, `src/migration/`). Admins only; **off by
 default** (`app_state` "migration"): while off, every request but the switch
 is refused (403), because it takes large uploads.
@@ -1081,7 +1081,7 @@ only read and sent as data, never run; nothing is created from the answer.
 
 ---
 
-## 5. Apps (Administration → Manage apps)
+## 5. Apps (Settings → Manage apps)
 
 An **app** (Projects, HR & leave, CRM, …) is a blueprint of tables, columns,
 links and roles in `src/apps/`. Installing it creates **ordinary tables**
@@ -1195,7 +1195,7 @@ access on the person.
   departments and "Own only". Clicking a tile or bar opens that filtered
   list. Date filters accept `$today` ("Due is before today") so these stay
   current.
-- **Drafted with AI** (optional, Beta; set up in **Administration → AI**):
+- **Drafted with AI** (optional, Beta; set up in **Settings → AI**):
   Manage apps → *Describe your organization*. `POST /api/apps/draft` asks
   the chosen AI for a **draft** (`src/ai/`):
   - **Settings** (`ai/settings.ts`, `app_state` under `ai`): the provider

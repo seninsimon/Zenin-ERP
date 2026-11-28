@@ -140,7 +140,7 @@ r.post("/ai/access/apply", adminOnly, handle(ai.accessApplyHandler));
 // apps (Projects, HR, ...): catalog, preview, install, remove
 r.get("/apps", adminOnly, handle(apps.listAppsHandler));
 r.get("/apps/dashboards", requireAuth, handle(apps.dashboardsHandler));
-// Bring your data (admins; off by default, see Administration → Bring your data)
+// Bring your data (admins; off by default, see Settings → Bring your data)
 r.get("/migration", adminOnly, handle(migration.listHandler));
 r.put("/migration/settings", adminOnly, handle(migration.settingsHandler));
 r.post("/migration/upload", adminOnly, handle(migration.uploadHandler));

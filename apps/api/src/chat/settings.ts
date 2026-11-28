@@ -1,6 +1,6 @@
 import { query } from "../db/pool.js";
 
-// Administration → Chat: three switches, kept in app_state under "chat".
+// Settings → Chat: three switches, kept in app_state under "chat".
 export type ChatSettings = {
   teamChat: boolean; // channels, direct messages, groups
   directMessages: boolean; // people may message each other privately

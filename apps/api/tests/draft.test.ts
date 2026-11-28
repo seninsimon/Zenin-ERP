@@ -63,7 +63,7 @@ describe("Apps drafted with AI", async () => {
   it("says clearly when the AI isn't set up", async () => {
     const res = await admin.post("/api/apps/draft", { description: "A small dental clinic with two dentists" });
     expect(res.status).toBe(503);
-    expect(res.body.message).toMatch(/Administration → AI/);
+    expect(res.body.message).toMatch(/Settings → AI/);
     expect((await admin.get("/api/apps")).body.aiDrafts).toBe(false);
   });
 

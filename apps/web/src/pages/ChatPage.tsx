@@ -588,7 +588,7 @@ export default function ChatPage() {
         <EmptyState
           icon={<IconMessageCircle size={26} stroke={1.5} />}
           title="Team chat is switched off"
-          description={isAdmin ? "Switch it on for everyone in Administration → Chat." : "Ask an admin to switch it on."}
+          description={isAdmin ? "Switch it on for everyone in Settings → Chat." : "Ask an admin to switch it on."}
           action={
             isAdmin ? (
               <Button component={Link} to="/settings/chat">

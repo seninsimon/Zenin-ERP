@@ -14,7 +14,7 @@ import { currentUser } from "../middleware/auth.js";
 import { audit } from "../repo/auditRepo.js";
 import { countActiveAdmins, createUser, deleteUserSessions, getUserById, listDepartments, updateUser } from "../repo/userRepo.js";
 
-// "Import people": many logins from one CSV file (Administration → Users).
+// "Import people": many logins from one CSV file (Settings → Users).
 //   1. Download the template: one column per detail, one per app.
 //   2. Check: every row, with what's wrong (nothing is saved).
 //   3. Import: the good rows become people; the rest come back as a file.

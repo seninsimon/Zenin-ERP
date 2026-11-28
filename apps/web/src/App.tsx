@@ -27,6 +27,7 @@ const AccessLevelsPage = lazy(() => import("./pages/settings/AccessLevelsPage"))
 const DepartmentsPage = lazy(() => import("./pages/settings/DepartmentsPage"));
 const AuditLogPage = lazy(() => import("./pages/settings/AuditLogPage"));
 const MigrationPage = lazy(() => import("./pages/settings/MigrationPage"));
+const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
 const AppsPage = lazy(() => import("./pages/settings/AppsPage"));
 const EmailSettingsPage = lazy(() => import("./pages/settings/EmailSettingsPage"));
 const BrandingPage = lazy(() => import("./pages/settings/BrandingPage"));
@@ -81,7 +82,7 @@ export default function App() {
 
                   {/* bookmarked /login after signing in: go home instead of "Page not found" */}
                   <Route path="login" element={<Navigate to="/" replace />} />
-                  <Route path="settings" element={<Navigate to="/settings/tables" replace />} />
+                  <Route path="settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
                   <Route path="settings/tables" element={<AdminOnly><TablesSettingsPage /></AdminOnly>} />
                   <Route path="settings/tables/:table" element={<AdminOnly><TableSettingsPage /></AdminOnly>} />
                   <Route path="settings/users" element={<AdminOnly><UsersPage /></AdminOnly>} />

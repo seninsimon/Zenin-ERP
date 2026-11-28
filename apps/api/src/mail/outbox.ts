@@ -5,7 +5,7 @@ import { mailEnabled, mailErrorMessage, sendMail } from "./mailer.js";
 // Emails are written to the outbox in the same transaction as the change that
 // caused them (so a failed save sends nothing), then sent by the worker.
 // A failed send is tried again after 1, 5 and 30 minutes, then marked failed
-// (shown on Administration → Email).
+// (shown on Settings → Email).
 
 export type EmailKind = "notification" | "account" | "summary" | "test";
 const RETRY_MINUTES = [1, 5, 30];
@@ -69,7 +69,7 @@ export async function processOutbox(opts: { limit?: number; onlyId?: string } = 
   return sent;
 }
 
-// Administration → Email: counts and the last emails.
+// Settings → Email: counts and the last emails.
 export async function outboxOverview() {
   const { rows: counts } = await query<{ sent_today: number; queued: number; failed: number }>(
     `SELECT count(*) FILTER (WHERE status = 'sent' AND sent_at > now() - interval '24 hours')::int AS sent_today,

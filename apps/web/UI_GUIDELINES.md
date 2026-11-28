@@ -167,9 +167,10 @@ shadows in components.**
 
 ### Sidebar (`src/layout/Sidebar.tsx`)
 
-- **Order:** Home and workspace pages, then the **Tables** the user can access,
-  then **Administration** (admins only). No filter box: finding a table by
-  name is the search's job (Ctrl K), which is at the top of the sidebar.
+- **Order:** Home and workspace pages, then the **Tables** the user can access.
+  **Settings** (⚙, admins only) is pinned at the bottom, always visible. No
+  filter box: finding a table by name is the search's job (Ctrl K), which is
+  at the top of the sidebar.
 - **Apps** (3 or more installed):
   - **On Home and settings pages:** the sidebar lists the apps, each with
     its **own colour** (`appColor()` in `features/apps/appIcons.ts`, by
@@ -178,10 +179,13 @@ shadows in components.**
   - **Inside an app:** its tables, under a **switcher** (coloured icon, name,
     "Switch app"). The switcher opens the **launcher**: a grid of app
     tiles, with search from 10 apps on, plus links to Home and Manage apps.
-- **Administration** folds away under its heading:
-  - it remembers open or closed per browser (`adminOpen`), and is always
-    open on settings pages;
-  - in the icon rail it becomes a single gear with the pages in a menu.
+- **Settings** is one item, not a list: every setting is on the Settings
+  page (`/settings`), grouped by what you're trying to do
+  (`SETTINGS_GROUPS` in `layout/nav.ts`: People & access, Apps & data, Your
+  organization, Safety), each a card with an icon and one line, plus a "Find
+  a setting" box. Every settings page starts with the breadcrumb "Settings ›".
+  The profile menu has **My profile** (everyone: about me) and **Settings**
+  (admins: about the organization).
 - **Active item:** accent background. One active item at a time.
 - **Collapsing:** desktops can collapse to a 64 px **icon rail**, with tooltips
   on every icon and the choice remembered. Tablets get the rail by default.

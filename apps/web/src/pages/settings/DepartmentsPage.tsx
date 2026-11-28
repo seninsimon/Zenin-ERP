@@ -77,7 +77,7 @@ function DepartmentModal({
   );
 }
 
-// Administration → Departments
+// Settings → Departments
 export default function DepartmentsPage() {
   const { data: departments = [], isLoading, isFetching, error, refetch } = useDepartments();
   const remove = useDeleteDepartment();
@@ -161,7 +161,7 @@ export default function DepartmentsPage() {
   );
 
   return (
-    <Page title="Departments" breadcrumbs={[{ label: "Administration" }, { label: "Departments" }]} width="wide">
+    <Page title="Departments" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Departments" }]} width="wide">
       <PageHeader
         title="Departments"
         help="departments"

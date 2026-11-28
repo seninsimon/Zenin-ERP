@@ -7,7 +7,7 @@ import api, { errorMessage } from "../../api/api";
 import { useRoles } from "../../api/reactQueryHooks/useAdmin";
 import { Section } from "../../components/ui/Page";
 
-// Administration → AI: the features, what they cost, and the limits.
+// Settings → AI: the features, what they cost, and the limits.
 // See docs/WORKFLOW.md, "Drafted with AI"
 
 export type AiFeatures = { draftApps: boolean; askZenin: boolean; accessAi: boolean; migrationAi: boolean };

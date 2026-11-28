@@ -30,7 +30,7 @@ import { Page, PageHeader, Section } from "../../components/ui/Page";
 import { tablePath, tableTitle } from "../../layout/nav";
 import { formatDateTime, formatNumber, pluralize } from "../../lib/format";
 
-// Administration → Bring your data (docs/WORKFLOW.md): move data from Excel or
+// Settings → Bring your data (docs/WORKFLOW.md): move data from Excel or
 // CSV (from any other software, after exporting). Zenin works out the tables,
 // field types and links; the admin reviews; it imports in the background and
 // proves nothing was lost. Off by default.
@@ -494,7 +494,7 @@ export default function MigrationPage() {
   };
 
   return (
-    <Page title="Bring your data" breadcrumbs={[{ label: "Administration" }, { label: "Bring your data" }]} width="wide">
+    <Page title="Bring your data" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Bring your data" }]} width="wide">
       <PageHeader
         title="Bring your data"
         description="Move your data from Excel, CSV or another system. Zenin builds the tables and links, then proves nothing was lost."

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import api from "../api/api";
 
-// The organization's name and logo (Administration → Branding). Loaded before
+// The organization's name and logo (Settings → Branding). Loaded before
 // signing in too (the sign-in page shows them). Until it's loaded, or when the
 // server can't be reached: "Zenin ERP" and a letter mark.
 

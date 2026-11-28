@@ -3,7 +3,7 @@ import { Group, Image, Text, ThemeIcon, Tooltip } from "@mantine/core";
 
 import { useBranding } from "../../lib/branding";
 
-// The organization's logo and name (Administration → Branding). Without a
+// The organization's logo and name (Settings → Branding). Without a
 // logo: the name's first letter on the accent colour. A wide logo (a wordmark,
 // which usually spells the name already) is shown alone, a bit larger.
 export function BrandMark({ size = 30, showName = true, nameSize = "md" }: { size?: number; showName?: boolean; nameSize?: string }) {

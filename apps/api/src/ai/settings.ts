@@ -2,7 +2,7 @@ import { query } from "../db/pool.js";
 import { HttpError } from "../lib/http.js";
 import { logger } from "../lib/logger.js";
 
-// AI settings, set in the app (Administration → AI), kept in app_state under
+// AI settings, set in the app (Settings → AI), kept in app_state under
 // "ai". Keys are never sent back to the browser. Each provider keeps its own
 // key, so switching back and forth doesn't mean pasting keys again.
 
@@ -157,7 +157,7 @@ export async function saveAiSettings(input: Record<string, unknown>): Promise<Ai
   return next;
 }
 
-// At start-up: an ANTHROPIC_API_KEY in .env fills Administration → AI once,
+// At start-up: an ANTHROPIC_API_KEY in .env fills Settings → AI once,
 // while nothing is saved there. After that the app's settings count.
 export async function importAiSettingsFromEnv() {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
@@ -165,6 +165,6 @@ export async function importAiSettingsFromEnv() {
   const { rows } = await query(`SELECT 1 FROM app_state WHERE key = 'ai'`);
   if (rows.length) return false;
   await saveAiSettings({ provider: "anthropic", key });
-  logger.info("the AI key was copied from .env into Administration → AI; ANTHROPIC_API_KEY in .env is no longer needed");
+  logger.info("the AI key was copied from .env into Settings → AI; ANTHROPIC_API_KEY in .env is no longer needed");
   return true;
 }

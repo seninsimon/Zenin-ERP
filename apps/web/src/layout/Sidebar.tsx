@@ -1,7 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
-import { ActionIcon, Box, Collapse, Group, Kbd, Menu, NavLink, Popover, ScrollArea, SimpleGrid, Skeleton, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Box, Group, Kbd, NavLink, Popover, ScrollArea, SimpleGrid, Skeleton, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
 import {
-  IconChevronDown,
   IconLayoutGrid,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
@@ -17,7 +16,7 @@ import { useCurrentUser } from "../auth/AuthContext";
 import { AppIcon } from "../features/apps/AppIcon";
 import { appPath, useAppMenu, useCurrentApp, type LauncherApp, type MenuTable } from "../features/apps/appMenu";
 import { usePreferences } from "../lib/preferences";
-import { ADMIN_NAV, MAIN_NAV, tablePath, tableTitle, type NavItem } from "./nav";
+import { MAIN_NAV, SETTINGS_PATH, tablePath, tableTitle, type NavItem } from "./nav";
 import classes from "./Sidebar.module.css";
 import { BrandMark } from "../components/ui/BrandMark";
 import { useBranding } from "../lib/branding";
@@ -216,65 +215,17 @@ function AppSwitcher({ app, apps, collapsed, onNavigate }: { app: LauncherApp; a
   );
 }
 
-// Administration (admins): folds away, so the sidebar is about the work.
-// Open on settings pages; otherwise as the admin last left it.
-function AdminSection({ collapsed, isActive, onNavigate }: { collapsed: boolean; isActive: (to: string) => boolean; onNavigate: () => void }) {
-  const { adminOpen, setPreference } = usePreferences();
+// Settings (admins): one item, pinned at the bottom of the sidebar; every
+// setting is grouped on the Settings page (layout/nav.ts SETTINGS_GROUPS)
+function SettingsItem({ collapsed, onNavigate }: { collapsed: boolean; onNavigate: () => void }) {
   const location = useLocation();
-  const navigate = useNavigate();
-  const inSettings = location.pathname.startsWith("/settings");
-  const open = adminOpen || inSettings;
-
-  if (collapsed) {
-    // icon rail: one gear, the pages in a menu beside it
-    return (
-      <>
-        <Box className={classes.divider} />
-        <Menu position="right-start" width={240} shadow="md" withinPortal>
-          <Menu.Target>
-            <UnstyledButton className={classes.railLink} aria-label="Administration" data-active={inSettings || undefined}>
-              <IconSettings size={20} stroke={1.75} />
-            </UnstyledButton>
-          </Menu.Target>
-          <Menu.Dropdown>
-            <Menu.Label>Administration</Menu.Label>
-            {ADMIN_NAV.map((item) => (
-              <Menu.Item
-                key={item.to}
-                leftSection={<item.icon size={16} stroke={1.75} />}
-                onClick={() => {
-                  navigate(item.to);
-                  onNavigate();
-                }}
-                fw={isActive(item.to) ? 600 : undefined}
-              >
-                {item.label}
-              </Menu.Item>
-            ))}
-          </Menu.Dropdown>
-        </Menu>
-      </>
-    );
-  }
   return (
-    <>
-      <UnstyledButton
-        className={classes.sectionToggle}
-        onClick={() => setPreference("adminOpen", !open)}
-        aria-expanded={open}
-        disabled={inSettings}
-      >
-        <span>Administration</span>
-        {!inSettings && <IconChevronDown size={14} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform 150ms" }} />}
-      </UnstyledButton>
-      <Collapse in={open}>
-        <Stack gap={2}>
-          {ADMIN_NAV.map((item) => (
-            <Item key={item.to} item={item} collapsed={false} active={isActive(item.to)} onNavigate={onNavigate} />
-          ))}
-        </Stack>
-      </Collapse>
-    </>
+    <Item
+      item={{ label: "Settings", to: SETTINGS_PATH, icon: IconSettings }}
+      collapsed={collapsed}
+      active={location.pathname.startsWith(SETTINGS_PATH)}
+      onNavigate={onNavigate}
+    />
   );
 }
 
@@ -385,12 +336,17 @@ export default function Sidebar({ collapsed, onNavigate }: { collapsed: boolean;
             </Text>
           )}
 
-          {isAdmin && <AdminSection collapsed={collapsed} isActive={isActive} onNavigate={onNavigate} />}
         </Stack>
       </ScrollArea>
 
+      {isAdmin && !collapsed && (
+        <Box p={8} className={classes.footer}>
+          <SettingsItem collapsed={false} onNavigate={onNavigate} />
+        </Box>
+      )}
       {collapsed && (
         <Box p={8} className={classes.footer}>
+          {isAdmin && <SettingsItem collapsed onNavigate={onNavigate} />}
           <Tooltip label="Expand sidebar" position="right">
             <UnstyledButton
               className={classes.railLink}

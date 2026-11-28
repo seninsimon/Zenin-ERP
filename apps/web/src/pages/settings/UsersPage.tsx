@@ -94,7 +94,7 @@ async function sendPasswordLink(u: User) {
   }
 }
 
-// whether email works (Administration → Email), for the password-link options
+// whether email works (Settings → Email), for the password-link options
 const useEmailStatus = () =>
   useQuery({ queryKey: ["email"], queryFn: async () => (await api.get<{ ready: boolean }>("/email")).data, staleTime: 60_000 });
 
@@ -356,7 +356,7 @@ function UserModal({ opened, onClose, user }: { opened: boolean; onClose: () => 
           <div>
             <Switch
               label={<WithHelp topic="administrator">Administrator</WithHelp>}
-              description={isSelf ? "You can't change this for yourself" : "Can do everything, including Administration. Keep it to one or two people."}
+              description={isSelf ? "You can't change this for yourself" : "Can do everything, including Settings. Keep it to one or two people."}
               checked={Boolean(selectedRole?.isAdmin)}
               disabled={isSelf || !adminId}
               onChange={(e) =>
@@ -537,7 +537,7 @@ function ResetPasswordModal({ user, onClose }: { user: User | null; onClose: () 
 
 /* ---------------- page ---------------- */
 
-// Administration → Users
+// Settings → Users
 export default function UsersPage() {
   const { user: me } = useCurrentUser();
   const { data: users = [], isLoading, isFetching, error, refetch } = useUsers();
@@ -771,7 +771,7 @@ export default function UsersPage() {
     });
 
   return (
-    <Page title="Users" breadcrumbs={[{ label: "Administration" }, { label: "Users" }]} width="wide">
+    <Page title="Users" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Users" }]} width="wide">
       <PageHeader
         title="Users"
         description="Accounts, what they can do in each app, and the departments they work in."

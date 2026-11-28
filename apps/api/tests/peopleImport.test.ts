@@ -7,7 +7,7 @@ import { anonymous, login, unique } from "./helpers.js";
 
 type AppOption = { key: string; name: string; levels: { level: string; label: string }[] };
 
-// "Import people" (Administration → Users): many logins from one CSV file.
+// "Import people" (Settings → Users): many logins from one CSV file.
 describe("Import people from a CSV file", async () => {
   const admin = await login();
   await admin.put("/api/email", { provider: "gmail", user: "office@example.com", pass: "x".repeat(16), appUrl: "http://erp.local" }).expect(200);

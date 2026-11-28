@@ -108,7 +108,7 @@ function NewTableModal({ opened, onClose }: { opened: boolean; onClose: () => vo
   );
 }
 
-// Administration → Tables & columns
+// Settings → Tables & columns
 export default function TablesSettingsPage() {
   const navigate = useNavigate();
   const { data = [], isLoading, isFetching, error, refetch } = useTables();
@@ -223,7 +223,7 @@ export default function TablesSettingsPage() {
   );
 
   return (
-    <Page title="Tables & columns" breadcrumbs={[{ label: "Administration" }, { label: "Tables & columns" }]} width="wide">
+    <Page title="Tables & columns" breadcrumbs={[{ label: "Settings", to: "/settings" }, { label: "Tables & columns" }]} width="wide">
       <PageHeader
         title="Tables & columns"
         description="Create tables, put each in an app, and define their columns."

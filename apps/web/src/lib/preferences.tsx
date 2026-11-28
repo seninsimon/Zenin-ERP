@@ -8,8 +8,6 @@ import { readJson, writeJson } from "./storage";
 type Preferences = {
   accent: Accent;
   sidebarCollapsed: boolean;
-  // the sidebar's Administration section is open (admins)
-  adminOpen: boolean;
   // alerts for things that need you (lib/alerts.ts): a chime, desktop notifications
   sound: boolean;
   desktopAlerts: boolean;
@@ -18,7 +16,7 @@ type Preferences = {
 };
 
 const KEY = "erp:preferences";
-const DEFAULTS: Preferences = { accent: "indigo", sidebarCollapsed: false, adminOpen: false, sound: true, desktopAlerts: false, actionSounds: true };
+const DEFAULTS: Preferences = { accent: "indigo", sidebarCollapsed: false, sound: true, desktopAlerts: false, actionSounds: true };
 
 type Ctx = Preferences & {
   setPreference: <K extends keyof Preferences>(key: K, value: Preferences[K]) => void;

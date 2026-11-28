@@ -3,7 +3,7 @@ import { env } from "../config/env.js";
 import { getMailSettings, type MailSettings } from "./settings.js";
 
 // Sending one email (the outbox decides when). The server and login come from
-// Administration → Email; Gmail is smtp.gmail.com:587 with STARTTLS and an app
+// Settings → Email; Gmail is smtp.gmail.com:587 with STARTTLS and an app
 // password.
 
 export type Mail = { to: string; subject: string; text: string; html: string };
@@ -63,7 +63,7 @@ export async function sendMail(mail: Mail) {
 // A reason people can act on, without anything secret in it.
 export function mailErrorMessage(error: unknown): string {
   const e = error as { code?: string; responseCode?: number; message?: string };
-  if (e.code === "EAUTH" || e.responseCode === 535) return "The mail server refused the login: check the address and the app password in Administration → Email";
+  if (e.code === "EAUTH" || e.responseCode === 535) return "The mail server refused the login: check the address and the app password in Settings → Email";
   if (e.code === "ECONNECTION" || e.code === "ETIMEDOUT" || e.code === "ESOCKET" || e.code === "EDNS") {
     return "Couldn't reach the mail server (no internet, or the server or port is wrong)";
   }

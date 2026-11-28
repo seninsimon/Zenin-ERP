@@ -230,7 +230,7 @@ function AccessSection({ schema }: { schema: Schema }) {
           <MultiSelect
             label="Departments"
             description={
-              departments.length ? "The departments that share this table." : "There are no departments yet. Create them under Administration → Departments."
+              departments.length ? "The departments that share this table." : "There are no departments yet. Create them under Settings → Departments."
             }
             placeholder={departmentIds.length ? undefined : "Choose departments"}
             error={noDepartment ? "Choose at least one department, or choose Everyone with access." : undefined}
@@ -546,7 +546,7 @@ function DeleteTableModal({ table, opened, onClose }: { table: string; opened: b
 
 /* ---------------- page ---------------- */
 
-// Administration → Tables & columns → one table
+// Settings → Tables & columns → one table
 export default function TableSettingsPage() {
   const { table = "" } = useParams();
   const { data, isLoading, error } = useSchema(table);
@@ -555,7 +555,7 @@ export default function TableSettingsPage() {
   const title = tableTitle(table);
 
   const crumbs = [
-    { label: "Administration" },
+    { label: "Settings", to: "/settings" },
     { label: "Tables & columns", to: "/settings/tables" },
     { label: title },
   ];

@@ -37,12 +37,20 @@ const round = (v: number | null) => (v === null || !Number.isFinite(v) ? null : 
 export async function summaryHandler(req: Request, res: Response) {
   const user = currentUser(req);
   const schema = await loadTable(req, "view");
-  const groupBy = schema.columns.find((c) => c.name === req.query.groupBy);
+  res.json(await summarize(user, schema, req.query));
+}
+
+export type SummaryQuery = { groupBy?: unknown; fn?: unknown; field?: unknown; search?: unknown; filters?: unknown };
+
+// The summary itself, as this person may see it (also used by Ask Zenin's
+// private mode, which works the numbers out here instead of in the AI)
+export async function summarize(user: CurrentUser, schema: TableSchema, q: SummaryQuery) {
+  const groupBy = schema.columns.find((c) => c.name === q.groupBy);
   if (!groupBy || !GROUP_TYPES.includes(groupBy.type)) throw new HttpError(400, "Choose a column to group by: a choice, person, department, link, Yes/No or date");
-  const fn: Fn = req.query.fn === "sum" || req.query.fn === "avg" ? req.query.fn : "count";
-  const field = fn === "count" ? null : schema.columns.find((c) => c.name === req.query.field);
+  const fn: Fn = q.fn === "sum" || q.fn === "avg" ? q.fn : "count";
+  const field = fn === "count" ? null : schema.columns.find((c) => c.name === q.field);
   if (fn !== "count" && (!field || !NUMBER_TYPES.includes(field.type))) throw new HttpError(400, "Choose a number column to add up");
-  const filters = parseFilters(req.query.filters, schema, user);
+  const filters = parseFilters(q.filters, schema, user);
   // a hidden field can't be grouped, added up or filtered by (that would reveal it)
   const hidden = hiddenColumns(user, schema);
   for (const c of [groupBy, field]) if (c && hidden.has(c.name)) throw new HttpError(400, `You can't group or add up "${c.label || c.name}"`);
@@ -53,7 +61,7 @@ export async function summaryHandler(req: Request, res: Response) {
     schema,
     {
       scope: recordScope(user, schema),
-      search: typeof req.query.search === "string" ? req.query.search.slice(0, 200) : "",
+      search: typeof q.search === "string" ? q.search.slice(0, 200) : "",
       filters,
       hide: [...hiddenColumns(user, schema)],
     },
@@ -136,14 +144,14 @@ export async function summaryHandler(req: Request, res: Response) {
     others = { key: null, label: `${rest.length} others`, count, value: valueOf(count, sum, n) };
   }
 
-  res.json({
+  return {
     groupBy: { name: groupBy.name, label: groupBy.label || groupBy.name, type: groupBy.type },
     fn,
     field: field ? { name: field.name, label: field.label || field.name } : null,
     groups: groups.map(({ key, label, count, value }) => ({ key, label, count, value })),
     others,
     total: { count: total.count, value: valueOf(total.count, num(total.sum), total.n) },
-  });
+  };
 }
 
 // Names for the group keys: people, departments, linked records (only ones

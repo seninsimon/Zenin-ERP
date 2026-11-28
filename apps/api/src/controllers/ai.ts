@@ -50,7 +50,8 @@ export async function aiUsageHandler(_req: Request, res: Response) {
 
 // GET /ai/assistant: may this person use Ask Zenin? (shows the Ask button)
 export async function assistantHandler(req: Request, res: Response) {
-  res.json({ available: await canAsk(currentUser(req)) });
+  // mode: "private" (the AI sees only the question and the tables' structure) or "full"
+  res.json({ available: await canAsk(currentUser(req)), mode: (await getAiSettings()).askMode });
 }
 
 // POST /ai/ask { turns: [{ role, content }] }: the answer to the last question

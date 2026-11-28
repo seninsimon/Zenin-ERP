@@ -1,17 +1,25 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { ActionIcon, Anchor, Badge, Box, Button, Drawer, Group, Loader, Paper, ScrollArea, Stack, Text, Textarea, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconArrowUp, IconRefresh, IconSparkles } from "@tabler/icons-react";
+import { ActionIcon, Anchor, Badge, Box, Button, Drawer, Group, Loader, Paper, ScrollArea, Stack, Table, Text, Textarea, Tooltip, UnstyledButton } from "@mantine/core";
+import { IconArrowRight, IconArrowUp, IconLock, IconRefresh, IconSparkles } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import api, { errorMessage } from "../../api/api";
 import { useCurrentUser } from "../../auth/AuthContext";
+import { tableTitle } from "../../layout/nav";
+import { formatNumber, pluralize } from "../../lib/format";
+import { measureLabel, type Summary } from "../records/summary";
 
 // Ask Zenin: questions about your records, answered by the AI an admin chose
 // (Settings → AI). It sees only what you can see, and only reads. The
 // conversation stays in this browser tab.
 
-type Turn = { role: "user" | "assistant"; content: string; error?: boolean };
+// What Zenin found and worked out itself (private mode), shown under the
+// answer: the AI never saw it.
+type Block =
+  | { kind: "records"; table: string; total: number; totalIsEstimate: boolean; rows: { id: string; title: string; link: string; details: string }[]; url: string }
+  | { kind: "summary"; table: string; summary: Summary; url: string };
+type Turn = { role: "user" | "assistant"; content: string; error?: boolean; blocks?: Block[] };
 
 const SUGGESTIONS = ["What's assigned to me?", "What was added this week?", "What's due in the next 7 days?"];
 
@@ -95,9 +103,82 @@ function Answer({ text }: { text: string }) {
   );
 }
 
+/* ---------------- results Zenin shows itself (private mode) ---------------- */
+
+function Results({ block }: { block: Block }) {
+  if (block.kind === "records") {
+    return (
+      <Paper withBorder radius="md" p="sm">
+        <Text size="xs" c="dimmed" mb={4}>
+          {block.totalIsEstimate ? "About " : ""}
+          {pluralize(block.total, "record")} in {tableTitle(block.table)}
+        </Text>
+        {block.rows.length ? (
+          <Stack gap={4}>
+            {block.rows.map((r) => (
+              <Box key={r.id}>
+                <Anchor component={Link} to={r.link} size="sm" fw={500}>
+                  {r.title}
+                </Anchor>
+                {r.details && (
+                  <Text size="xs" c="dimmed" lineClamp={1}>
+                    {r.details}
+                  </Text>
+                )}
+              </Box>
+            ))}
+          </Stack>
+        ) : (
+          <Text size="sm">Nothing matches.</Text>
+        )}
+        {block.total > block.rows.length && (
+          <Anchor component={Link} to={block.url} size="xs" mt={6} display="inline-flex" style={{ alignItems: "center", gap: 4 }}>
+            Open all {formatNumber(block.total)} <IconArrowRight size={12} />
+          </Anchor>
+        )}
+      </Paper>
+    );
+  }
+  const s = block.summary;
+  const counting = s.fn === "count";
+  const shown = (v: number | null) => (v === null ? "" : formatNumber(v));
+  return (
+    <Paper withBorder radius="md" p="sm">
+      <Text size="xs" c="dimmed" mb={4}>
+        {measureLabel(s.fn, s.field?.label ?? "")} by {s.groupBy.label.toLowerCase()} · {tableTitle(block.table)}
+      </Text>
+      {s.total.count ? (
+        <Table fz="sm" verticalSpacing={2} horizontalSpacing={4}>
+          <Table.Tbody>
+            {s.groups.slice(0, 12).map((g) => (
+              <Table.Tr key={g.key ?? "__empty"}>
+                <Table.Td>{g.label}</Table.Td>
+                <Table.Td ta="right" className="tabular-nums">
+                  {counting ? formatNumber(g.count) : shown(g.value)}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+            <Table.Tr>
+              <Table.Td fw={600}>All</Table.Td>
+              <Table.Td ta="right" fw={600} className="tabular-nums">
+                {counting ? formatNumber(s.total.count) : shown(s.total.value)}
+              </Table.Td>
+            </Table.Tr>
+          </Table.Tbody>
+        </Table>
+      ) : (
+        <Text size="sm">Nothing matches.</Text>
+      )}
+      <Anchor component={Link} to={block.url} size="xs" mt={6} display="inline-flex" style={{ alignItems: "center", gap: 4 }}>
+        Open as a chart <IconArrowRight size={12} />
+      </Anchor>
+    </Paper>
+  );
+}
+
 /* ---------------- the drawer ---------------- */
 
-function Conversation({ onNavigate }: { onNavigate: () => void }) {
+function Conversation({ onNavigate, mode }: { onNavigate: () => void; mode: "private" | "full" }) {
   const { user } = useCurrentUser();
   const [turns, setTurns] = useState<Turn[]>(() => load(user._id));
   const [text, setText] = useState("");
@@ -118,8 +199,8 @@ function Conversation({ onNavigate }: { onNavigate: () => void }) {
     setBusy(true);
     try {
       const history = next.filter((t) => !t.error).map(({ role, content }) => ({ role, content }));
-      const { data } = await api.post<{ answer: string }>("/ai/ask", { turns: history });
-      setTurns((t) => [...t, { role: "assistant", content: data.answer }]);
+      const { data } = await api.post<{ answer: string; blocks?: Block[] }>("/ai/ask", { turns: history });
+      setTurns((t) => [...t, { role: "assistant", content: data.answer, blocks: data.blocks ?? [] }]);
     } catch (err) {
       setTurns((t) => [...t, { role: "assistant", content: errorMessage(err), error: true }]);
     } finally {
@@ -136,6 +217,19 @@ function Conversation({ onNavigate }: { onNavigate: () => void }) {
             <Text size="xs" c="dimmed">
               I only see what you can see, and I can't change anything yet.
             </Text>
+            {mode === "private" ? (
+              <Group gap={6} wrap="nowrap" align="flex-start">
+                <IconLock size={14} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden />
+                <Text size="xs" c="dimmed">
+                  Private: the AI only sees your question. Zenin finds the records and works out the numbers here, so your data stays on your
+                  server.
+                </Text>
+              </Group>
+            ) : (
+              <Text size="xs" c="dimmed">
+                The AI reads the records it finds, to describe them.
+              </Text>
+            )}
             <Stack gap={6} mt="xs">
               {SUGGESTIONS.map((s) => (
                 <Button key={s} variant="light" size="xs" justify="flex-start" onClick={() => send(s)}>
@@ -158,7 +252,10 @@ function Conversation({ onNavigate }: { onNavigate: () => void }) {
                   {t.content}
                 </Text>
               ) : (
-                <Answer key={i} text={t.content} />
+                <Stack key={i} gap="xs">
+                  <Answer text={t.content} />
+                  {t.blocks?.map((b, j) => <Results key={j} block={b} />)}
+                </Stack>
               )
             )}
             {busy && (
@@ -221,7 +318,7 @@ export function AskZenin() {
   const [opened, setOpened] = useState(false);
   const { data } = useQuery({
     queryKey: ["askAvailable"],
-    queryFn: async () => (await api.get<{ available: boolean }>("/ai/assistant")).data,
+    queryFn: async () => (await api.get<{ available: boolean; mode?: "private" | "full" }>("/ai/assistant")).data,
     staleTime: 60_000,
   });
   if (!data?.available) return null;
@@ -248,7 +345,7 @@ export function AskZenin() {
         }
         styles={{ content: { display: "flex", flexDirection: "column" }, body: { flex: 1, padding: 0, minHeight: 0 } }}
       >
-        <Conversation onNavigate={() => setOpened(false)} />
+        <Conversation onNavigate={() => setOpened(false)} mode={data.mode ?? "private"} />
       </Drawer>
     </>
   );

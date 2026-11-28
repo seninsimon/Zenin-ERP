@@ -66,3 +66,29 @@
   border-radius: var(--mantine-radius-md);
   background: var(--app-muted);
 }
+
+/* a column header: its name, and the pin (shown on hover; always on touch screens and when pinned) */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  inline-size: 100%;
+}
+.headerLabel {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pinButton {
+  opacity: 0;
+}
+:global(.rdg-header-row) [role="columnheader"]:hover .pinButton,
+.pinButton:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .pinButton {
+    opacity: 0.6;
+  }
+}

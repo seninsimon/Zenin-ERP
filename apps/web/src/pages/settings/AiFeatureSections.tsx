@@ -21,6 +21,19 @@ type Usage = {
   byPerson: { userId: string | null; name: string; requests: number; costUsd: number }[];
 };
 
+export type AskMode = "private" | "full";
+
+// What each feature sends to the AI company, said plainly under its switch
+const SENDS: Record<keyof AiFeatures, string | ((mode: AskMode) => string)> = {
+  draftApps: "Sends: the sentence you type. No records.",
+  askZenin: (mode) =>
+    mode === "private"
+      ? "Sends: the question, and the names of the tables and fields. No records, names or numbers."
+      : "Sends: the question, and the records found for it (only what the person asking may see).",
+  accessAi: "Sends: people's names, apps, access levels and table names. No records.",
+  migrationAi: "Sends: the old database's procedure code and its table and field names. No rows.",
+};
+
 const FEATURES: { key: keyof AiFeatures; label: string; description: string }[] = [
   { key: "draftApps", label: "Draft apps", description: "Manage apps → Describe your organization: the AI drafts tables from a sentence or two." },
   {
@@ -65,7 +78,7 @@ function useSaveAi() {
 
 /* ---------------- features ---------------- */
 
-export function FeaturesSection({ features, ready, askRoles }: { features: AiFeatures; ready: boolean; askRoles: string[] }) {
+export function FeaturesSection({ features, ready, askRoles, askMode }: { features: AiFeatures; ready: boolean; askRoles: string[]; askMode: AskMode }) {
   const save = useSaveAi();
   return (
     <Section title="Features" description={ready ? "Switched off means gone from everyone's screens." : "Add a key first: without one, every AI feature is off."}>
@@ -81,15 +94,55 @@ export function FeaturesSection({ features, ready, askRoles }: { features: AiFea
                 </Badge>
               </Group>
             }
-            description={f.description}
+            description={
+              <>
+                {f.description}
+                <Text component="span" display="block" size="xs" c="dimmed" mt={2}>
+                  {(() => {
+                    const s = SENDS[f.key];
+                    return typeof s === "function" ? s(askMode) : s;
+                  })()}
+                </Text>
+              </>
+            }
             checked={ready && features[f.key]}
             disabled={!ready || save.isPending}
             onChange={(e) => save.mutate({ features: { [f.key]: e.currentTarget.checked } })}
           />
         ))}
+        {ready && features.askZenin && <AskPrivacy askMode={askMode} />}
         {ready && features.askZenin && <AskWho askRoles={askRoles} />}
       </Stack>
     </Section>
+  );
+}
+
+// Ask Zenin: private (the AI sees only the question and the tables' structure)
+// or full (it also reads the records it finds)
+function AskPrivacy({ askMode }: { askMode: AskMode }) {
+  const save = useSaveAi();
+  return (
+    <Stack gap="xs" pl={54} maw={560}>
+      <Text size="sm" fw={500}>
+        What the AI may see
+      </Text>
+      <SegmentedControl
+        size="xs"
+        value={askMode}
+        onChange={(v) => save.mutate({ askMode: v })}
+        data={[
+          { value: "private", label: "Private (recommended)" },
+          { value: "full", label: "Full" },
+        ]}
+        aria-label="What the AI may see"
+        style={{ alignSelf: "flex-start" }}
+      />
+      <Text size="xs" c="dimmed">
+        {askMode === "private"
+          ? "The AI only turns the question into a search. Zenin finds the records and works out counts and totals on your server, and shows them under the answer. It can list, count and add up, but not describe what's written inside records."
+          : "The AI also reads the records it finds, so it can describe and summarise them. Those records go to the AI company."}
+      </Text>
+    </Stack>
   );
 }
 

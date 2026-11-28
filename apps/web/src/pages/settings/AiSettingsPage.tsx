@@ -20,6 +20,7 @@ type AiSettings = {
   features: AiFeatures;
   limits: AiLimits;
   askRoles: string[];
+  askMode: "private" | "full";
 };
 
 const PROVIDERS: Record<Provider, { name: string; company: string; keyUrl: string; keyPage: string }> = {
@@ -200,14 +201,24 @@ export default function AiSettingsPage() {
           </Stack>
         </Section>
 
-        <FeaturesSection features={data.features} ready={data.ready} askRoles={data.askRoles} />
+        {data.provider === "gemini" && (
+          <Alert variant="light" color="yellow" icon={<IconInfoCircle size={18} />} title="Use a paid Gemini key for real company data">
+            <Text size="sm">
+              With a free key (from Google AI Studio, without billing), Google may use what's sent to improve its products, and people at
+              Google may read it. With a key from a Google Cloud project that has billing turned on, it doesn't. Zenin can't tell which kind of
+              key this is.
+            </Text>
+          </Alert>
+        )}
+        <FeaturesSection features={data.features} ready={data.ready} askRoles={data.askRoles} askMode={data.askMode ?? "private"} />
         <UsageSection provider={data.provider} />
         <LimitsSection key={JSON.stringify(data.limits)} limits={data.limits} />
 
         <Alert variant="light" color="blue" icon={<IconInfoCircle size={18} />} title="Good to know">
           <Stack gap={4}>
             <Text size="sm">
-              When you use an AI feature, only what it needs is sent to {info.company}: for drafting, the description you type; for Ask Zenin, the question and the records found for it, which the person asking can already see.
+              Nothing is sent in the background: only when someone uses an AI feature, and only what that feature needs (see "Sends" under each one).
+              It travels encrypted to {info.company}.
             </Text>
             <Text size="sm">
               This is in Beta: the AI drafts, you decide. Every draft is checked and shown to you before anything is added, and you can change everything afterwards.

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Alert, Badge, Box, Button, Group, Loader, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
-import { IconAlertTriangle, IconArrowUpRight, IconLock, IconPlus } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowUpRight, IconLock, IconPin, IconPinFilled, IconPlus } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -14,6 +14,7 @@ import { BulkUpdateModal } from "./BulkUpdateModal";
 import { FieldValue } from "../../components/ui/FieldValue";
 import { recordPath, tableTitle } from "../../layout/nav";
 import { formatNumber, pluralize } from "../../lib/format";
+import { readJson, writeJson } from "../../lib/storage";
 import { useLiveChanges, useLiveHeldBack } from "../live/live";
 import { CompactFields } from "./fields/compact";
 import { FieldInput } from "./fields/FieldInput";
@@ -54,6 +55,8 @@ const DATA_START = 2;
 const MAX_CLEAR_WITHOUT_ASKING = 20;
 // changes Undo remembers (this tab only)
 const MAX_UNDO = 20;
+// pinned columns stay on the left while scrolling; more would leave no room on a phone
+const MAX_PINNED = 3;
 
 // one cell changed: back to `before` while it's still `after` (as stored)
 type Change = { id: string; col: string; before: unknown; after: unknown };
@@ -138,7 +141,23 @@ export function SpreadsheetView({
   const heldBack = useLiveHeldBack();
   const [page, setPage] = useState(1);
   const perms = schema.permissions ?? {};
-  const columns = schema.columns;
+  // pinned columns (this person, this browser): the first column until changed
+  const pinKey = `erp:sheet:${table}`;
+  const [pinnedNames, setPinnedNames] = useState<string[]>(
+    () => readJson<{ pinned: string[] | null }>(pinKey, { pinned: null }).pinned ?? schema.columns.slice(0, 1).map((c) => c.name),
+  );
+  const togglePin = (name: string) =>
+    setPinnedNames((now) => {
+      const next = now.includes(name) ? now.filter((n) => n !== name) : [...now, name];
+      writeJson(pinKey, { pinned: next });
+      return next;
+    });
+  // the grid's order: pinned ones first (in the table's order), then the rest
+  const columns = useMemo(() => {
+    const pinned = schema.columns.filter((c) => pinnedNames.includes(c.name));
+    return [...pinned, ...schema.columns.filter((c) => !pinnedNames.includes(c.name))];
+  }, [schema.columns, pinnedNames]);
+  const pinnedCount = columns.filter((c) => pinnedNames.includes(c.name)).length;
 
   // the page of records; every few seconds while live updates are held back
   const query = useQuery({
@@ -259,7 +278,7 @@ export function SpreadsheetView({
     !row.locked &&
     !READ_ONLY_TYPES.includes(c.type) && !(c.type === "relation" && c.inline) && (row.draft ? Boolean(perms.create) : Boolean(perms.edit));
   const required = columns.filter((c) => c.required && !READ_ONLY_TYPES.includes(c.type));
-  const titleOf = (row: Row) => plain(row.show[columns[0]?.name]) || "this record";
+  const titleOf = (row: Row) => plain(row.show[schema.columns[0]?.name]) || "this record";
 
   // one cell saved, from the value it started with; `done` collects it for Undo
   const saveCell = async (row: Row, column: RecordColumn, value: unknown, was: unknown, done?: Change[]) => {
@@ -572,8 +591,38 @@ export function SpreadsheetView({
     ...columns.map((c, i): Column<Row> => ({
       key: c.name,
       name: columnLabel(c),
-      frozen: i === 0,
+      frozen: i < pinnedCount,
       resizable: true,
+      renderHeaderCell: () => {
+        const pinned = i < pinnedCount;
+        const full = !pinned && pinnedCount >= MAX_PINNED;
+        return (
+          <span className={classes.header}>
+            <span className={classes.headerLabel}>{columnLabel(c)}</span>
+            <Tooltip label={pinned ? "Unpin" : full ? `Up to ${MAX_PINNED} pinned columns: unpin one first` : "Pin this column (it stays on the left)"}>
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color={pinned ? undefined : "gray"}
+                className={pinned ? undefined : classes.pinButton}
+                aria-label={pinned ? `Unpin ${columnLabel(c)}` : `Pin ${columnLabel(c)}`}
+                aria-pressed={pinned}
+                disabled={full}
+                tabIndex={-1}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRange(null);
+                  setActive(null);
+                  togglePin(c.name);
+                }}
+              >
+                {pinned ? <IconPinFilled size={14} /> : <IconPin size={14} />}
+              </ActionIcon>
+            </Tooltip>
+          </span>
+        );
+      },
       width: c.type === "boolean" ? 90 : c.type === "number" || c.type === "date" ? 130 : 180,
       editable: (row) => editable(c, row),
       cellClass: (row) => {
@@ -762,7 +811,7 @@ export function SpreadsheetView({
       {bulkEdit && (
         <BulkUpdateModal
           table={table}
-          columns={columns}
+          columns={schema.columns}
           ids={[...selectedRows]}
           opened
           onClose={() => setBulkEdit(false)}

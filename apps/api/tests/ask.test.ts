@@ -55,13 +55,16 @@ describe("Ask Zenin", async () => {
   const question = (content: string) => ({ turns: [{ role: "user", content }] });
 
   afterAll(async () => {
-    await admin.put("/api/ai", { features: { askZenin: false }, askRoles: [], limits: { perPersonDaily: null } });
+    await admin.put("/api/ai", { features: { askZenin: false }, askRoles: [], limits: { perPersonDaily: null }, askMode: "private" });
     await admin.put("/api/ai", { provider: "gemini", removeKey: true });
     await admin.put("/api/ai", { provider: "openai", removeKey: true });
   });
 
   it("is off until an admin switches it on, and then for the chosen roles", async () => {
     await admin.put("/api/ai", { provider: "gemini", key: "AIzaTEST-gemini-key-0123456789abcdef" }).expect(200);
+    expect((await admin.get("/api/ai")).body.askMode).toBe("private"); // private unless an admin chooses full
+    // the tests below are full mode: the AI reads the records it finds
+    await admin.put("/api/ai", { askMode: "full" }).expect(200);
     expect((await sam.get("/api/ai/assistant")).body.available).toBe(false);
     expect((await sam.post("/api/ai/ask", question("hi"))).status).toBe(403);
 
@@ -150,6 +153,52 @@ describe("Ask Zenin", async () => {
     expect(second.messages.at(-1)!.tool_call_id).toBe("t1");
     expect(people).toEqual(expect.arrayContaining([expect.objectContaining({ id: samId, name: "Sam Ito" })]));
     await admin.put("/api/ai", { provider: "gemini" }).expect(200);
+  });
+
+  it("private mode: the AI never sees a record, a name or a number; Zenin shows the results", async () => {
+    await admin.put("/api/ai", { askMode: "private", limits: { perPersonDaily: null } }).expect(200);
+    await admin.post(`/api/schema/${table}/column`, { name: "owner", label: "Owner", type: "user" }).expect(200);
+    const list = (await admin.get(`/api/table/${table}?limit=50&withRaw=1`)).body.data as { _id: string; _raw: { title: string } }[];
+    const vpn = list.find((r) => r._raw.title === "VPN down")!._id;
+    await admin.put(`/api/table/${table}/${vpn}`, { owner: samId }).expect(200);
+
+    // a list, as Sam may see it (Eng only)
+    script(geminiCall("show_records", { table, filters: [{ field: "status", op: "in", values: ["Open"] }] }), geminiText("Here are the open tickets."));
+    const res = (await sam.post("/api/ai/ask", question("Which tickets are open?")).expect(200)).body;
+    expect(res.mode).toBe("private");
+    expect(res.answer).toBe("Here are the open tickets.");
+    expect(res.blocks[0]).toMatchObject({ kind: "records", table, total: 2 });
+    expect(res.blocks[0].rows.map((r: { title: string }) => r.title).sort()).toEqual(["Printer jam", "VPN down"]);
+    expect(res.blocks[0].url).toContain(`/table/${table}?f=`);
+    // what reached the AI: the question and the tables' structure, nothing else
+    const sent = JSON.stringify(calls.map((c) => c.body));
+    for (const secret of ["Printer jam", "VPN down", "Payroll question", "Old laptop", "Sam Ito", username]) expect(sent).not.toContain(secret);
+    expect(sent).toContain("status"); // field names are fine
+    expect(sent).toMatch(/matched[^a-z]+some/); // all the AI learns: something matched
+    calls.length = 0;
+
+    // a person by name, matched by Zenin (the AI only passes on what was typed)
+    script(geminiCall("show_records", { table, filters: [{ field: "owner", op: "nameContains", value: "Sam" }] }), geminiText("These are Sam's tickets."));
+    const mine = (await sam.post("/api/ai/ask", question("Tickets owned by Sam?")).expect(200)).body;
+    expect(mine.blocks[0].rows.map((r: { title: string }) => r.title)).toEqual(["VPN down"]);
+    expect(JSON.stringify(calls.map((c) => c.body))).not.toContain("Sam Ito");
+    calls.length = 0;
+
+    // counts by status, worked out by Zenin
+    script(geminiCall("show_summary", { table, group_by: "status" }), geminiText("Here are your tickets by status."));
+    const counts = (await sam.post("/api/ai/ask", question("How many tickets per status?")).expect(200)).body;
+    expect(counts.blocks[0]).toMatchObject({ kind: "summary", table });
+    expect(counts.blocks[0].summary.groups.map((g: { label: string; count: number }) => [g.label, g.count])).toEqual([["Open", 2], ["Closed", 1]]);
+    expect(counts.blocks[0].url).toContain("view=summary");
+    const sentCounts = JSON.stringify(calls.map((c) => c.body));
+    expect(sentCounts).not.toContain("Printer jam");
+    expect(sentCounts).not.toMatch(/"count\\?":\s*\d/);
+
+    // nothing by that name: an empty list, said plainly
+    script(geminiCall("show_records", { table, filters: [{ field: "owner", op: "nameContains", value: "Nobody" }] }), geminiText("I couldn't find any."));
+    const none = (await sam.post("/api/ai/ask", question("Tickets of Nobody?")).expect(200)).body;
+    expect(none.blocks[0].total).toBe(0);
+    expect(JSON.stringify(calls.at(-1)!.body)).toContain("none");
   });
 
   it("checks the question and the daily limit", async () => {

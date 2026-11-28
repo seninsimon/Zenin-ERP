@@ -921,6 +921,14 @@ table → Access → **Spreadsheet view** (`table_schemas.spreadsheet`;
 `PUT /schema/:table { spreadsheet }`), e.g. for Payslips. There's no separate "who may use
 it": people see and change what their level allows, and hidden fields never
 appear. Phones don't get it (`?view=sheet` falls back to the list).
+- **Pinned columns** stay on the left while scrolling sideways (react-data-grid
+  `frozen`). Each header has a pin button (shown on hover; always on touch
+  screens and when pinned): **Pin this column** / **Unpin**. A pinned column
+  moves to the left, after the other pinned ones, in the table's order. At
+  most 3 (`MAX_PINNED`), so there's room left to scroll. The first column is
+  pinned until someone changes it. The choice is per person and per browser
+  (`localStorage` `erp:sheet:<table>`), like a column width; nothing is saved
+  on the server.
 - **Rows:** `GET /table/:t?withRaw=1` gives the usual names to show and, in
   `_raw`, the stored values (ids) to edit and compare, hidden fields left out.
   100 rows a page, with the list's search, filters and sort.
@@ -1229,10 +1237,30 @@ access on the person.
     cache on the instructions, effort low, server-side fallback), Gemini
     `generateContent` with `functionDeclarations` (the model's parts go back
     unchanged, thought signatures included), ChatGPT Chat Completions with
-    `tools`. The tools run as the asking person: `search_records` calls
-    `listForUser()` (the list endpoint's own code, permissions and all) and
-    `find_people`. Tool errors (unknown table, a filter that doesn't fit)
-    go back to the AI so it can retry.
+    `tools`. Tool errors (unknown table, a filter that doesn't fit) go back
+    to the AI so it can retry. Two modes (`settings.askMode`, Settings → AI;
+    `GET /api/ai/assistant` returns `mode`):
+    - **Private** (the default): the AI sees only the question and the
+      names of the tables, fields and choice options the person may see. No
+      user name, departments, records or numbers. Its tools are
+      `show_records` and `show_summary`; Zenin runs them as the asking
+      person (`listForUser()`, and `summarize()` from
+      `controllers/summary.ts`, the summary view's own code) and keeps the
+      result as a **block** (at most 5 per answer). The AI gets back only
+      `{ shown, matched: "some" | "none" }`. A filter on a person or a link
+      can say `nameContains: "asha"`; Zenin turns it into the matching ids
+      itself (`resolveFilters`), so names never reach the AI. The answer is
+      `{ answer, mode, blocks }`; the browser shows each block under the
+      answer (records with links and "Open all", or a small summary table
+      with "Open as a chart"). It can't describe what's written inside
+      records; that needs Full mode.
+    - **Full**: as before: `search_records` calls `listForUser()` and
+      `find_people`, the AI reads the records found and writes them into its
+      answer. Blocks are empty.
+
+    Each feature's card in Settings → AI says what it sends. With Gemini
+    chosen, a warning says to use a paid key for company data (free keys
+    let Google use and read what's sent; Zenin can't tell the two apart).
   - **Limits** (`settings.limits`, checked before each request by
     `checkLimits()`): a monthly estimated spend at which every AI feature
     answers 429, with a bell to the admins at 80% and at 100%

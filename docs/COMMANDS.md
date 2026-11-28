@@ -230,12 +230,14 @@ These are set in the ERP, under **Settings** (admins: ⚙ Settings at the bottom
 | See totals: records by status, person or month; total or average of an amount | Open the table → **Summary** (next to Table, Board…). Choose "By …" and "Show"; click a row to see its records |
 | Put a report on Home (e.g. "Sales by month") | Open the table → **Summary** → choose "By …", "Show" and the chart → **Pin to Home**. Rename or remove it from its card's **⋯** on Home |
 | Move data in from Excel, CSV or another system | **Bring your data**: switch it on, upload an Excel workbook, CSV files or a database dump (`.sql`: mysqldump, `pg_dump --format=plain`, or SQL Server "Generate Scripts" with data), check the tables and types, **Import**. From a dump, its procedures, triggers and views are listed; **Explain with AI** says what each does and what to use in Zenin (needs **AI**, with "Explain old-system logic" on). The page proves nothing was lost and lists any values that didn't fit. **Remove this import** undoes it. Switch it off when you're done |
+| Keep a column in view while scrolling the Spreadsheet (up to 3) | In the column's header, the pin button: **Pin this column**; press it again to **Unpin**. Each person's choice is kept in their browser |
 | Turn the Spreadsheet view off for a table (it's on for every table; e.g. off for Payslips) | **Tables & columns** → the table → Access → **Spreadsheet view** |
 | Apps (HR, Projects, Clinic…), or your own (**New app**) | **Manage apps**. A new table asks which app it goes in |
 | ERP name and logo | **Branding** (everyone sets their own picture in **My profile**) |
 | Email (notifications, password links, morning summary) | **Email**: choose Gmail, enter the address and its 16-letter app password, **Send a test email** |
 | Team chat and comments on records | **Chat** (team chat is off until you switch it on) |
 | AI (Beta): drafting apps, Ask Zenin, change access with AI (Users page) | **AI**: choose Claude, Gemini or ChatGPT, paste the key, **Test**. The same page shows the estimated cost and sets limits |
+| Keep company records away from the AI company | **AI** → Ask Zenin → **Private (recommended)**, the default: the AI sees only the question and the table and field names; Zenin finds the records and works out the numbers itself. **Full** lets the AI read the records it finds. Each feature says what it sends. With Gemini, use a paid key for real company data |
 | People (Administrator, App access), what each level can do, teams | **Users**, **Access levels**, **Departments** |
 | Many people at once (up to 500 per CSV file) | **Users** → **Import people**: download the template, fill it in, **Check file**, **Add** |
 | Disable several people at once | **Users**: tick them → **Disable** |

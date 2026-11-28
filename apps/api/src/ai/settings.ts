@@ -37,7 +37,12 @@ export type AiSettings = {
   features: Record<Feature, boolean>;
   limits: AiLimits;
   askRoles: string[]; // who may use Ask Zenin: these roles (ids); empty = everyone
+  // Ask Zenin: "private" (the default) = the AI sees only the question and the
+  // tables' structure, Zenin finds and counts the records; "full" = the AI
+  // also reads the records it finds
+  askMode: AskMode;
 };
+export type AskMode = "private" | "full";
 
 const NO_LIMITS: AiLimits = { monthlyUsd: null, perPersonDaily: null };
 
@@ -59,6 +64,7 @@ export async function getAiSettings(): Promise<AiSettings> {
     features: { ...FEATURE_DEFAULTS, ...(saved.features ?? {}) },
     limits: { ...NO_LIMITS, ...(saved.limits ?? {}) },
     askRoles: Array.isArray(saved.askRoles) ? saved.askRoles : [],
+    askMode: saved.askMode === "full" ? "full" : "private",
   };
   cache = { at: Date.now(), value };
   return value;
@@ -87,6 +93,7 @@ export const publicAiSettings = (s: AiSettings) => ({
   features: s.features,
   limits: s.limits,
   askRoles: s.askRoles,
+  askMode: s.askMode,
 });
 
 // A limit from the form: empty or 0 means no limit.
@@ -138,6 +145,11 @@ export async function saveAiSettings(input: Record<string, unknown>): Promise<Ai
     }
     askRoles = [...new Set(input.askRoles as string[])];
   }
+  let askMode = current.askMode;
+  if (input.askMode !== undefined) {
+    if (input.askMode !== "private" && input.askMode !== "full") throw new HttpError(400, "Choose private or full");
+    askMode = input.askMode;
+  }
 
   const next: AiSettings = {
     provider,
@@ -147,6 +159,7 @@ export async function saveAiSettings(input: Record<string, unknown>): Promise<Ai
     features,
     limits,
     askRoles,
+    askMode,
   };
   await query(
     `INSERT INTO app_state (key, value) VALUES ('ai', $1::jsonb)

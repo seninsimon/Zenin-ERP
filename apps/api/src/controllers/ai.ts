@@ -1,13 +1,15 @@
 import type { Request, Response } from "express";
 import { ask, canAsk } from "../ai/assistant.js";
 import { applyAccess, askAccess, canUseAccessAi } from "../ai/accessAssistant.js";
-import { HttpError } from "../lib/http.js";
+import { HttpError, param } from "../lib/http.js";
 import { testAi } from "../ai/generate.js";
 import { usageOverview } from "../ai/usage.js";
 import { isAdmin } from "../auth/access.js";
 import { currentUser } from "../middleware/auth.js";
-import { getAiSettings, PROVIDER_NAMES, publicAiSettings, saveAiSettings } from "../ai/settings.js";
+import { featureOn, getAiSettings, PROVIDER_NAMES, publicAiSettings, saveAiSettings } from "../ai/settings.js";
 import { audit } from "../repo/auditRepo.js";
+import { cleanDescription, draftAutomation, draftFormula } from "../ai/builders.js";
+import { getSchema } from "../schema/schemaRepo.js";
 
 // Settings → AI (admins): which AI drafts apps, and its key.
 
@@ -83,4 +85,39 @@ export async function accessApplyHandler(req: Request, res: Response) {
     });
   });
   res.json({ message: "Applied", preview });
+}
+
+/* ---------------- Describe it: formulas and automations (ai/builders.ts) ---------------- */
+
+// GET /ai/builders: which "Describe it" helpers are on (admins)
+export async function buildersHandler(_req: Request, res: Response) {
+  res.json({ formula: await featureOn("formulaAi"), automation: await featureOn("automationAi") });
+}
+
+const tableFor = async (req: Request) => {
+  const schema = await getSchema(param(req, "table"));
+  if (!schema) throw new HttpError(404, "Table not found");
+  return schema;
+};
+
+// POST /schema/:table/formula/ai { description, column?, label?, resultType? }:
+// a formula that compiles (nothing saved)
+export async function formulaAiHandler(req: Request, res: Response) {
+  if (!(await featureOn("formulaAi"))) throw new HttpError(403, 'Formulas with AI is off. Switch it on in Settings → AI.');
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 100) : undefined);
+  const user = currentUser(req);
+  res.json(
+    await draftFormula(await tableFor(req), cleanDescription(body.description), { column: str(body.column), label: str(body.label), resultType: str(body.resultType) }, {
+      _id: user._id,
+      isAdmin: true,
+    })
+  );
+}
+
+// POST /schema/:table/automations/ai { description }: a checked draft (nothing saved)
+export async function automationAiHandler(req: Request, res: Response) {
+  if (!(await featureOn("automationAi"))) throw new HttpError(403, 'Automations with AI is off. Switch it on in Settings → AI.');
+  const user = currentUser(req);
+  res.json(await draftAutomation(await tableFor(req), cleanDescription((req.body ?? {}).description), { _id: user._id, isAdmin: true }));
 }

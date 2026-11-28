@@ -472,6 +472,40 @@ A **Formula** column is worked out from the record's other fields:
 - **Values sent for formula columns are ignored** (API, CSV). The column
   settings check the formula live as you type
   (`POST /api/schema/:t/formula/check`), with its value on the latest record.
+- **Writing a formula without mistakes** (`features/records/FormulaEditor.tsx`,
+  the same box in the column settings and Make it a formula):
+  - **Click to build** (the default for a new formula; `FormulaBuilder.tsx`,
+    recipes in `formulaText.ts`): pick Multiply, Add up, Subtract,
+    Percentage of, Days between dates, Date + days or Join text, then fill
+    the blanks from lists that only offer fields that fit (numbers for
+    Multiply, dates for Days between…). Only the recipes that give the
+    field's kind of value are offered (a Date field: Date + days; a Text
+    field: Join text). Number recipes can round (on for Percentage). It
+    writes the formula itself (`{qty} * {price}`, `ROUND({amount} * 0.18, 2)`,
+    `ADD_DAYS({date}, 30)`, `CONCAT({first}, " ", {last})`) and says it in
+    words.
+  - **Write it yourself** (an existing formula opens here): the text box.
+    `tidyFormula()` turns Excel-style typing into a real formula before it's
+    checked or saved: a leading `=`, `× ÷ −`, and field names or labels
+    without braces (`=Qty*Price`, `Unit price * Qty`, `DAYS(Check out,
+    Check in)`), longest name first, never inside quotes or braces, never a
+    function name.
+  - **Excel habits get Zenin answers** (server, `EXCEL_HINTS` in
+    `schema/formula.ts`): `B2` → use field names instead of cells; `SUM`,
+    `PRODUCT`, `AVERAGE` → use + or * (or a Total field); `TODAY`, `NOW` →
+    not available, a formula is worked out on save and would go stale;
+    `VLOOKUP` → use a Link field.
+  - **Describe it** (AI feature `formulaAi`, "Formulas with AI"; offered
+    when `GET /ai/builders` says so): the person describes it in their own
+    words (English or Malayalam). `POST /schema/:t/formula/ai { description,
+    column?, label?, resultType? }` (`ai/builders.ts`, `draftFormula`) sends
+    the AI only that and the usable fields' names, labels, types and choice
+    options, never records. The answer must compile (`tryFormula`) and give
+    the field's own type (taken from the field, never from the browser);
+    if not, the AI gets Zenin's error once to fix it, then a plain 422.
+    "Not possible" answers come back with their reason. The formula goes
+    into the box with what it does in words, and Zenin's usual check (every
+    record, in Make it a formula) decides. The AI never saves anything.
 - **Make it a formula** (`schema/convert.ts`): a typed Number, Date or Text
   field becomes a formula **for the whole column**, in place (never one
   cell's own formula: totals, reports and other screens must be able to
@@ -761,6 +795,15 @@ orders Received/Cancelled.
   - the person in a User column;
   - **the person in a linked record**, e.g. `employee.account`: the
     Employee's login.
+- **Describe it with AI** (AI feature `automationAi`, "Automations with
+  AI"): the admin says what should happen in their own words.
+  `POST /schema/:t/automations/ai { description }` (`ai/builders.ts`,
+  `draftAutomation`) sends the AI only that, the table's field names, types
+  and choice options, and the "who" choices (as names like "the person in
+  Employee"), never records or people's names. The answer goes through
+  `normalizeAutomation()`, the same checks as the form (one retry with the
+  error). The normal automation window opens filled in, marked "Drafted by
+  AI", with the sentence; **nothing runs until Save**.
 - **They run in the save's transaction** (`afterSave()` in
   `src/schema/automations.ts`), after formulas and totals. Their own
   changes don't trigger automations again (no loops). Previews and CSV
@@ -1292,7 +1335,8 @@ access on the person.
     unknown model, out of credit).
   - **Test** (`POST /api/ai/test`) sends one tiny request.
   - **Features** (`settings.features`, one switch per built feature:
-    `draftApps`, `askZenin`, `accessAi`, `migrationAi`): with no key every
+    `draftApps`, `askZenin`, `accessAi`, `migrationAi`, `formulaAi`,
+    `automationAi`): with no key every
     feature is off. A switched-off
     feature answers 403 and disappears from the screens.
   - **Usage** (`ai/usage.ts`, table `ai_usage`, migration 015): every

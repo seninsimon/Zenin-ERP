@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Group, Input, Stack, Text, Textarea, UnstyledButton } from "@mantine/core";
+import { Button, Code, Group, Input, SegmentedControl, Stack, Text, Textarea, UnstyledButton } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
-import { IconAlertCircle, IconCircleCheck } from "@tabler/icons-react";
+import { IconAlertCircle, IconCircleCheck, IconSparkles } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 
-import { checkFormula, errorMessage } from "../../api/api";
+import { checkFormula, errorMessage, formulaWithAi, getAiBuilders } from "../../api/api";
 import { useSchema } from "../../api/reactQueryHooks/useTables";
 import { columnLabel, type RecordColumn, type TableSchemaInfo } from "./schema";
+import { FormulaBuilder } from "./FormulaBuilder";
+import { recipesFor, tidyFormula, type ResultType } from "./formulaText";
 import { formatDate, formatNumber } from "../../lib/format";
 import { WithHelp } from "../../components/ui/HelpTip";
 
@@ -26,10 +29,15 @@ const showSample = (type: string, value: unknown) =>
             : "No"
           : `"${String(value)}"`;
 
-// The "Formula" field (column settings, Make it a formula): the expression,
-// buttons that insert a field, and a live check (is it valid, what does it
-// give on the latest record) as you type. `showCheck` false: the caller
-// checks it itself (Make it a formula checks every record).
+// The "Formula" field (column settings, Make it a formula). Two ways, one
+// result:
+// - Click to build (the default for a new formula): ready-made recipes with
+//   lists of fields that fit, so there's nothing to mistype (FormulaBuilder);
+// - Write it yourself: the expression, buttons that insert a field, and a
+//   live check as you type. Excel-style typing (=Qty*Price, qty × price) is
+//   turned into a real formula when you leave the box (tidyFormula).
+// `showCheck` false: the caller checks it itself (Make it a formula checks
+// every record). `resultType`: only recipes that give this kind of value.
 export function FormulaEditor({
   table,
   columnName,
@@ -38,6 +46,8 @@ export function FormulaEditor({
   error,
   showCheck = true,
   autoFocus,
+  resultType,
+  targetLabel = "This field",
 }: {
   table: string;
   columnName?: string;
@@ -46,6 +56,8 @@ export function FormulaEditor({
   error?: string;
   showCheck?: boolean;
   autoFocus?: boolean;
+  resultType?: ResultType;
+  targetLabel?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const schema = useSchema(table).data as TableSchemaInfo | undefined;
@@ -53,7 +65,44 @@ export function FormulaEditor({
     (c: RecordColumn) => c.name !== columnName && (USABLE.includes(c.type) || (c.type === "choice" && !c.multiple))
   );
 
-  const [debounced] = useDebouncedValue(value, 500);
+  const columns = (schema?.columns ?? []) as RecordColumn[];
+  const canBuild = recipesFor(columns, columnName, resultType).length > 0;
+  // Describe it: when an AI key is set and "Formulas with AI" is on
+  const canDescribe = Boolean(
+    useQuery({ queryKey: ["aiBuilders"], queryFn: async () => (await getAiBuilders()).data, staleTime: 60_000 }).data?.formula
+  );
+  // a new formula starts with the recipes; an existing one opens as written
+  const [chosen, setChosen] = useState<"build" | "describe" | "write">(() => (value.trim() ? "write" : "build"));
+  const mode = chosen === "build" && !canBuild ? "write" : chosen === "describe" && !canDescribe ? "write" : chosen;
+  const ways = [
+    ...(canBuild ? [{ value: "build", label: "Pick" }] : []),
+    ...(canDescribe ? [{ value: "describe", label: "Describe it" }] : []),
+    { value: "write", label: "Write it" },
+  ];
+
+  // Describe it: the AI writes it; Zenin's own check (below, or every record
+  // in Make it a formula) says whether it fits before anything is saved
+  const [wish, setWish] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [written, setWritten] = useState<{ expression: string; says: string } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const describe = async () => {
+    setAsking(true);
+    setAiError(null);
+    try {
+      const { data } = await formulaWithAi(table, { description: wish, column: columnName, label: targetLabel, resultType });
+      setWritten(data);
+      onChange(data.expression);
+    } catch (err) {
+      setWritten(null);
+      onChange("");
+      setAiError(errorMessage(err, "The AI couldn't write it"));
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  const [debounced] = useDebouncedValue(tidyFormula(value, columns), 500);
   const [check, setCheck] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     let active = true;
@@ -88,14 +137,112 @@ export function FormulaEditor({
     caret.current = null;
   }, [value]);
 
+  const header = (
+    <Group justify="space-between" gap="xs" wrap="wrap">
+      <Input.Label required>
+        <WithHelp topic="formula">Formula</WithHelp>
+      </Input.Label>
+      {ways.length > 1 && (
+        <SegmentedControl
+          size="xs"
+          aria-label="How to make the formula"
+          data={ways}
+          value={mode}
+          onChange={(v) => {
+            setChosen(v as typeof chosen);
+            // the choices and Describe it start fresh; Write it keeps what's there to change
+            if (v !== "write") onChange("");
+            setWritten(null);
+            setAiError(null);
+          }}
+        />
+      )}
+    </Group>
+  );
+  const checkLine = showCheck && check && value.trim() && !error && (
+    <Group gap={6} wrap="nowrap" align="flex-start">
+      {check.ok ? (
+        <IconCircleCheck size={16} color="var(--mantine-color-teal-6)" style={{ flexShrink: 0, marginTop: 2 }} />
+      ) : (
+        <IconAlertCircle size={16} color="var(--mantine-color-error)" style={{ flexShrink: 0, marginTop: 2 }} />
+      )}
+      <Text size="sm" c={check.ok ? undefined : "var(--mantine-color-error)"}>
+        {check.text}
+      </Text>
+    </Group>
+  );
+  const errorLine = error && (
+    <Text size="sm" c="var(--mantine-color-error)">
+      {error}
+    </Text>
+  );
+
+  if (mode === "describe") {
+    return (
+      <Stack gap={6}>
+        {header}
+        <Textarea
+          aria-label="What should it do?"
+          placeholder="e.g. 10% discount when Qty is over 100, otherwise nothing"
+          description="Say it in your own words, in English or Malayalam. The AI gets only this and the field names, never records."
+          autosize
+          minRows={2}
+          maxRows={5}
+          maxLength={500}
+          value={wish}
+          autoFocus={autoFocus}
+          onChange={(e) => setWish(e.currentTarget.value)}
+        />
+        <Group gap="xs">
+          <Button size="xs" variant="light" leftSection={<IconSparkles size={14} />} loading={asking} disabled={wish.trim().length < 3} onClick={describe}>
+            {written ? "Write it again" : "Write the formula"}
+          </Button>
+          {written && (
+            <Button size="xs" variant="subtle" onClick={() => setChosen("write")}>
+              Change it by hand
+            </Button>
+          )}
+        </Group>
+        {aiError && (
+          <Text size="sm" c="var(--mantine-color-error)">
+            {aiError}
+          </Text>
+        )}
+        {written && (
+          <Stack gap={2}>
+            <Text size="sm" fw={600}>
+              {targetLabel} = {written.says}
+            </Text>
+            <Text size="xs" c="dimmed">
+              The AI wrote <Code>{written.expression}</Code>. Check it below before using it.
+            </Text>
+          </Stack>
+        )}
+        {checkLine}
+        {errorLine}
+      </Stack>
+    );
+  }
+
+  if (mode === "build") {
+    return (
+      <Stack gap={6}>
+        {header}
+        <FormulaBuilder columns={columns} target={columnName} targetLabel={targetLabel} resultType={resultType} onChange={onChange} />
+        {checkLine}
+        {errorLine}
+      </Stack>
+    );
+  }
+
   return (
     <Stack gap={6}>
+      {header}
       <Textarea
         ref={ref}
-        label={<WithHelp topic="formula">Formula</WithHelp>}
-        withAsterisk
-        description="Use {field} for a field, + − * / and ROUND, MIN, MAX, ABS, IF, DAYS, ADD_DAYS, CONCAT, BLANK"
-        placeholder="e.g. {basic} + {allowances} - {deductions}"
+        aria-label="Formula"
+        description="Click a field below, or type its name. + − × ÷ and ROUND, MIN, MAX, ABS, IF, DAYS, ADD_DAYS, CONCAT, BLANK"
+        placeholder="e.g. Basic + Allowances - Deductions"
         autosize
         minRows={2}
         maxRows={6}
@@ -103,6 +250,11 @@ export function FormulaEditor({
         value={value}
         autoFocus={autoFocus}
         onChange={(e) => onChange(e.currentTarget.value)}
+        // Excel-style typing becomes the real formula: =Qty*Price -> {qty} * {price}
+        onBlur={() => {
+          const tidy = tidyFormula(value, columns);
+          if (tidy !== value) onChange(tidy);
+        }}
         error={error}
       />
       {usable.length > 0 && (
@@ -125,21 +277,9 @@ export function FormulaEditor({
         </Input.Wrapper>
       )}
       <Text size="xs" c="dimmed">
-        Examples: <code>{"{qty} * {rate}"}</code> · <code>{"DAYS({to}, {from}) + 1"}</code> ·{" "}
-        <code>{'IF({stock} < {reorder_level}, "Low", "")'}</code>
+        Examples: <code>Qty * Rate</code> · <code>DAYS(To, From) + 1</code> · <code>{'IF(Stock < Reorder level, "Low", "")'}</code>
       </Text>
-      {showCheck && check && value.trim() && !error && (
-        <Group gap={6} wrap="nowrap" align="flex-start">
-          {check.ok ? (
-            <IconCircleCheck size={16} color="var(--mantine-color-teal-6)" style={{ flexShrink: 0, marginTop: 2 }} />
-          ) : (
-            <IconAlertCircle size={16} color="var(--mantine-color-error)" style={{ flexShrink: 0, marginTop: 2 }} />
-          )}
-          <Text size="sm" c={check.ok ? undefined : "var(--mantine-color-error)"}>
-            {check.text}
-          </Text>
-        </Group>
-      )}
+      {checkLine}
     </Stack>
   );
 }

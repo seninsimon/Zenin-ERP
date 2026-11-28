@@ -404,6 +404,16 @@ Formatting helpers live in `src/lib/format.ts`.
   with `ChangePreview`, then one named button ("Make it a formula", "Use this
   rule"). Say how to undo it (Change back). No confirm for the undo itself.
   Formulas are always for a whole column, never one cell's own.
+- **AI drafts, people decide:** an AI helper ("Describe it") only fills in
+  the normal form or box. The person sees the result in plain words (and,
+  for formulas, Zenin's check on every record) and presses the usual button.
+  Mark AI drafts ("Drafted by AI: check it, then save"), say what was sent
+  under the box ("never records"), and hide the helper when its AI switch is
+  off.
+- **Formulas are clicked, not typed, by default:** `FormulaEditor` opens
+  with recipes (pick what to do, then fields from lists that fit) and says
+  the result in words; "Write it yourself" is the second choice. Never show
+  `{braces}` in help or examples for people: use field names (Qty × Rate).
 - **Modal layout:** the title says the task ("Add column"). Buttons sit
   bottom-right: Cancel, then the primary action named for the task ("Add
   column", not "OK"). On phones, modals are full screen.

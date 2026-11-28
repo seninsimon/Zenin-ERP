@@ -10,7 +10,7 @@ import { Section } from "../../components/ui/Page";
 // Settings → AI: the features, what they cost, and the limits.
 // See docs/WORKFLOW.md, "Drafted with AI"
 
-export type AiFeatures = { draftApps: boolean; askZenin: boolean; accessAi: boolean; migrationAi: boolean };
+export type AiFeatures = { draftApps: boolean; askZenin: boolean; accessAi: boolean; migrationAi: boolean; formulaAi: boolean; automationAi: boolean };
 export type AiLimits = { monthlyUsd: number | null; perPersonDaily: number | null };
 
 type Totals = { requests: number; failed: number; inputTokens: number; outputTokens: number; costUsd: number; unpriced: number };
@@ -32,6 +32,8 @@ const SENDS: Record<keyof AiFeatures, string | ((mode: AskMode) => string)> = {
       : "Sends: the question, and the records found for it (only what the person asking may see).",
   accessAi: "Sends: people's names, apps, access levels and table names. No records.",
   migrationAi: "Sends: the old database's procedure code and its table and field names. No rows.",
+  formulaAi: "Sends: what you describe, and the table's field names and choice options. No records.",
+  automationAi: "Sends: what you describe, and the table's field names and choice options. No records or people's names.",
 };
 
 const FEATURES: { key: keyof AiFeatures; label: string; description: string }[] = [
@@ -51,8 +53,18 @@ const FEATURES: { key: keyof AiFeatures; label: string; description: string }[] 
     label: "Explain old-system logic",
     description: "Bring your data: the AI explains the old database's procedures, functions, triggers and views in plain English, and what to use in Zenin instead. Nothing is created from it.",
   },
+  {
+    key: "formulaAi",
+    label: "Formulas with AI",
+    description: "Describe it in the formula box: the AI writes the formula from what you say. Zenin checks it on every record before anything changes.",
+  },
+  {
+    key: "automationAi",
+    label: "Automations with AI",
+    description: "Describe it with AI in a table's automations: the AI drafts it, you see it in plain words, and nothing runs until you save it.",
+  },
 ];
-const FEATURE_NAMES: Record<string, string> = { draftApps: "Draft apps", askZenin: "Ask Zenin", accessAi: "Change access with AI", migrationAi: "Explain old-system logic", test: "Test" };
+const FEATURE_NAMES: Record<string, string> = { draftApps: "Draft apps", askZenin: "Ask Zenin", accessAi: "Change access with AI", migrationAi: "Explain old-system logic", formulaAi: "Formulas with AI", automationAi: "Automations with AI", test: "Test" };
 const BILLING: Record<string, { label: string; url: string }> = {
   anthropic: { label: "Anthropic Console → Billing", url: "https://console.anthropic.com/settings/billing" },
   gemini: { label: "Google AI Studio → Usage & billing", url: "https://aistudio.google.com/usage" },

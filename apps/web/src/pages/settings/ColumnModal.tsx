@@ -23,8 +23,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 import { IconMathFunction } from "@tabler/icons-react";
 import { MakeFormulaModal } from "../../features/records/MakeFormulaModal";
+import { tidyFormula } from "../../features/records/formulaText";
 import { CAN_BE_FORMULA, type RecordColumn } from "../../features/records/schema";
-import { useAddColumn, useTables, useUpdateColumn } from "../../api/reactQueryHooks/useTables";
+import { useAddColumn, useSchema, useTables, useUpdateColumn } from "../../api/reactQueryHooks/useTables";
 import { useAccessLevels } from "../../api/reactQueryHooks/useAdmin";
 import { tableTitle } from "../../layout/nav";
 import type { ChoiceOption, RollupConfig } from "../../features/records/schema";
@@ -161,6 +162,8 @@ export function ColumnModal({
   const fullScreen = useMediaQuery("(max-width: 36em)");
   const { data: tables = [] } = useTables();
   const add = useAddColumn(table);
+  // the table's fields: Excel-style formulas (=Qty*Price) become real ones
+  const tableColumns = ((useSchema(table).data as { columns?: RecordColumn[] } | undefined)?.columns ?? []) as RecordColumn[];
   const update = useUpdateColumn(table, column?.name ?? "");
   // the name follows the label until the user edits the name themselves
   const [nameTouched, setNameTouched] = useState(false);
@@ -261,7 +264,7 @@ export function ColumnModal({
           ...(v.type === "choice" && column?.type === "choice" ? { options: v.options } : {}),
           default: DEFAULTABLE_TYPES.includes(v.type) ? (v.default ?? null) : null,
           ...(v.type === "autonumber" ? { autonumber: { prefix: v.prefix } } : {}),
-          ...(v.type === "formula" ? { formula: { expression: v.expression } } : {}),
+          ...(v.type === "formula" ? { formula: { expression: tidyFormula(v.expression, tableColumns) } } : {}),
           ...(v.type === "rollup" ? { rollup: { fn: "count", ...v.rollup } } : {}),
           ...(v.type === "relation" && !v.multiple ? { inline: v.inline } : {}),
           onlyLevels: v.limited ? v.onlyLevels : [],
@@ -279,7 +282,7 @@ export function ColumnModal({
           ...(v.type === "choice" ? { options: v.options } : {}),
           ...(DEFAULTABLE_TYPES.includes(v.type) && v.default !== null ? { default: v.default } : {}),
           ...(v.type === "autonumber" ? { autonumber: { prefix: v.prefix } } : {}),
-          ...(v.type === "formula" ? { formula: { expression: v.expression } } : {}),
+          ...(v.type === "formula" ? { formula: { expression: tidyFormula(v.expression, tableColumns) } } : {}),
           ...(v.type === "rollup" ? { rollup: { fn: "count", ...v.rollup } } : {}),
           ...(v.type === "relation" && !v.multiple ? { inline: v.inline } : {}),
           ...(v.limited ? { onlyLevels: v.onlyLevels } : {}),
@@ -462,6 +465,7 @@ export function ColumnModal({
           {form.values.type === "formula" && (
             <FormulaEditor
               table={table}
+              targetLabel={form.values.label.trim() || "This field"}
               columnName={editing ? column?.name : undefined}
               value={form.values.expression}
               onChange={(expression) => form.setFieldValue("expression", expression)}

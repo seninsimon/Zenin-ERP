@@ -52,7 +52,7 @@ automations without code. Built by one founder in Thrissur, Kerala.
   export TEST_DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2- | sed -E 's#/[^/?]+$#/generic_erp_test#')"
   pnpm test
   ```
-  All tests must pass (350 on 2026-11-28). Add tests for new behaviour.
+  All tests must pass (357 on 2026-11-28). Add tests for new behaviour.
 - **Web:**
   ```bash
   cd apps/web
@@ -92,6 +92,8 @@ automations without code. Built by one founder in Thrissur, Kerala.
 - **AI features:**
   - Provider and key are set in Settings → AI.
   - Claude via the Anthropic SDK; Gemini and OpenAI via REST.
+  - "Describe it" for formulas and automations (`ai/builders.ts`): the AI
+    only drafts; Zenin checks it and nothing is saved until the person does.
   - Ask Zenin is **Private** by default: the AI never sees records, names
     or numbers; Zenin runs its plan and shows the results itself.
   - Usage and costs are estimated in the `ai_usage` table.

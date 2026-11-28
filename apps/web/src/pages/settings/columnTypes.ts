@@ -35,7 +35,7 @@ export const columnTypes: ColumnTypeInfo[] = [
   { value: "date", label: "Date", description: "A calendar date", icon: IconCalendar, group: "Basic" },
   { value: "boolean", label: "Yes / No", description: "A checkbox: done, paid, active", icon: IconToggleLeft, group: "Basic" },
   { value: "autonumber", label: "Auto-number", description: "A reference given automatically: INV-0001, INV-0002", icon: IconListNumbers, group: "Basic" },
-  { value: "formula", label: "Formula", description: "Worked out from other fields: {qty} * {rate}", icon: IconMathFunction, group: "Basic" },
+  { value: "formula", label: "Formula", description: "Worked out from other fields: Qty × Rate", icon: IconMathFunction, group: "Basic" },
   { value: "rollup", label: "Total", description: "Adds up linked records: a project's hours, an invoice's lines", icon: IconSum, group: "Links & media" },
   { value: "choice", label: "Choice", description: "Pick from a list: status, priority, category", icon: IconSelector, group: "Basic" },
   { value: "textarea", label: "Long text", description: "Several lines of plain text", icon: IconAlignLeft, group: "Content" },

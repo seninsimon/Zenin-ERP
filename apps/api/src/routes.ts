@@ -137,6 +137,9 @@ r.get("/ai/usage", adminOnly, handle(ai.aiUsageHandler));
 r.get("/ai/assistant", requireAuth, handle(ai.assistantHandler));
 r.post("/ai/ask", requireAuth, handle(ai.askHandler));
 // change access with AI: suggestions with a preview; an admin applies them
+r.get("/ai/builders", adminOnly, handle(ai.buildersHandler));
+r.post("/schema/:table/formula/ai", adminOnly, handle(ai.formulaAiHandler));
+r.post("/schema/:table/automations/ai", adminOnly, handle(ai.automationAiHandler));
 r.get("/ai/access", adminOnly, handle(ai.accessAvailableHandler));
 r.post("/ai/access", adminOnly, handle(ai.accessAskHandler));
 r.post("/ai/access/apply", adminOnly, handle(ai.accessApplyHandler));

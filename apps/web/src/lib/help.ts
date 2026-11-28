@@ -138,9 +138,9 @@ export const HELP = {
     title: "Formula",
     text: [
       "Works out a value from other fields of the same record, and updates by itself. Nobody types in it.",
-      "Write field names in {curly brackets}. IF(condition, then, else) picks between two values; DAYS(end, start) counts days between dates.",
+      "Pick what to do (Multiply, Percentage of, Days between dates…) and choose the fields. Or write it yourself with field names: IF(condition, then, else) picks between two values; DAYS(end, start) counts days between dates.",
     ],
-    example: "{quantity} * {price} gives the line amount.",
+    example: "Multiply Quantity × Price gives the line amount.",
   },
   rollup: {
     title: "Total",

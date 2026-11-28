@@ -92,6 +92,13 @@ export const getConversion = (table: string, column: string) =>
   api.get<{ conversion: { from: string; changed: number } | null }>(convertUrl(table, column));
 export const changeBackColumn = (table: string, column: string) => api.delete<{ message: string; changed: number }>(convertUrl(table, column));
 
+// "Describe it": the AI writes a formula or drafts an automation (nothing saved)
+export const getAiBuilders = () => api.get<{ formula: boolean; automation: boolean }>("/ai/builders");
+export const formulaWithAi = (table: string, body: { description: string; column?: string; label?: string; resultType?: string }) =>
+  api.post<{ expression: string; says: string; type: string }>(`/schema/${encodeURIComponent(table)}/formula/ai`, body);
+export const automationWithAi = (table: string, description: string) =>
+  api.post<{ trigger: unknown; actions: unknown[] }>(`/schema/${encodeURIComponent(table)}/automations/ai`, { description });
+
 //tables
 
 // One page of records. Rows are keyed by column NAME and include

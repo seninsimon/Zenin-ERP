@@ -54,6 +54,16 @@ describe("Formula columns", async () => {
     paid: true,
   });
 
+  it("answers Excel habits in Zenin's terms", async () => {
+    const msg = async (expression: string) => (await admin.post(`/api/schema/${t}/formula/check`, { expression })).body.message as string;
+    expect(await msg("B2 * C2")).toMatch(/looks like an Excel cell/);
+    expect(await msg("basic * 2")).toMatch(/Unknown word "basic"\. Click a field/);
+    expect(await msg("SUM({basic}, {allowances})")).toMatch(/No SUM needed/);
+    expect(await msg("TODAY()")).toMatch(/would go stale/);
+    expect(await msg("VLOOKUP({name})")).toMatch(/Link field/);
+    expect(await msg("FOO({basic})")).toMatch(/Unknown function FOO\(\)/);
+  });
+
   it("works out values when a record is created", () => {
     expect(anna).toMatchObject({
       net: 35000,
@@ -111,7 +121,7 @@ describe("Formula columns", async () => {
     expect(await bad("{bsic} + 1")).toMatch(/Unknown column \{bsic\}/);
     expect(await bad("{Basic pay} + 1")).toMatch(/Did you mean \{basic\}\?/);
     expect(await bad('{name} + 1')).toMatch(/Use CONCAT/);
-    expect(await bad("TODAY()")).toMatch(/Unknown function TODAY\(\)/);
+    expect(await bad("TODAY()")).toMatch(/TODAY\(\) isn.t available/);
     expect(await bad('IF({paid}, 1, "x")')).toMatch(/same kind/);
     expect(await bad("{basic} +")).toMatch(/ends too early/);
     expect(await bad("(1 + 2")).toMatch(/Expected "\)"/);

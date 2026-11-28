@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { ActionIcon, Button, Group, Modal, Select, Stack, Switch, Text, TextInput, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Modal, Select, Stack, Switch, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { IconBolt, IconPencil, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
+import { IconBolt, IconPencil, IconPlus, IconSparkles, IconTrash, IconX } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import api, { errorMessage } from "../../api/api";
+import api, { automationWithAi, errorMessage, getAiBuilders } from "../../api/api";
 import { useTables } from "../../api/reactQueryHooks/useTables";
 import { Section } from "../../components/ui/Page";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -169,19 +170,22 @@ function AutomationModal({
   table,
   columns,
   editing,
+  draft,
   opened,
   onClose,
 }: {
   table: string;
   columns: RecordColumn[];
   editing: Automation | null;
+  // drafted by the AI from a description: filled in, to check and save
+  draft?: { trigger: Trigger; actions: Action[]; from: string };
   opened: boolean;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
   const who = useWhoOptions(columns);
-  const [trigger, setTrigger] = useState<Trigger>(editing?.trigger ?? { when: "created" });
-  const [actions, setActions] = useState<Action[]>(editing?.actions ?? [{ do: "notify", who: CREATOR }]);
+  const [trigger, setTrigger] = useState<Trigger>(editing?.trigger ?? draft?.trigger ?? { when: "created" });
+  const [actions, setActions] = useState<Action[]>(editing?.actions ?? draft?.actions ?? [{ do: "notify", who: CREATOR }]);
   const [error, setError] = useState<string | null>(null);
   const watched = columns.filter((c) => !["formula", "rollup", "autonumber", "richtext", "image", "images", "file", "files"].includes(c.type));
   const watchedColumn = trigger.when === "changed" ? columns.find((c) => c.name === trigger.column) : undefined;
@@ -202,6 +206,11 @@ function AutomationModal({
   return (
     <Modal opened={opened} onClose={onClose} title={editing ? "Edit automation" : "New automation"} size="xl">
       <Stack>
+        {draft && (
+          <Alert variant="light" color="grape" icon={<IconSparkles size={18} />} title="Drafted by AI: check it, then save">
+            From “{draft.from}”. It's below as you'd fill it in yourself, and in words at the bottom. Nothing runs until you save it.
+          </Alert>
+        )}
         <Group gap="xs" align="flex-end" wrap="wrap">
           <Select
             label="When"
@@ -274,7 +283,9 @@ export function AutomationsSection({ table, columns }: { table: string; columns:
     queryKey: ["automations", table],
     queryFn: async () => (await api.get<Automation[]>(`/schema/${table}/automations`)).data,
   });
-  const [modal, setModal] = useState<{ editing: Automation | null } | null>(null);
+  const [modal, setModal] = useState<{ editing: Automation | null; draft?: { trigger: Trigger; actions: Action[]; from: string } } | null>(null);
+  const [describing, setDescribing] = useState(false);
+  const aiOn = Boolean(useQuery({ queryKey: ["aiBuilders"], queryFn: async () => (await getAiBuilders()).data, staleTime: 60_000 }).data?.automation);
   const toggle = useMutation({
     mutationFn: async (a: Automation) => api.put(`/schema/${table}/automations/${a._id}`, { ...a, enabled: !a.enabled }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["automations", table] }),
@@ -290,9 +301,16 @@ export function AutomationsSection({ table, columns }: { table: string; columns:
       help="automations"
       description="Things that happen by themselves when records change, like telling someone their leave was approved."
       actions={
-        <Button variant="default" leftSection={<IconPlus size={16} />} onClick={() => setModal({ editing: null })}>
-          Add automation
-        </Button>
+        <Group gap="xs">
+          {aiOn && (
+            <Button variant="light" leftSection={<IconSparkles size={16} />} onClick={() => setDescribing(true)}>
+              Describe it with AI
+            </Button>
+          )}
+          <Button variant="default" leftSection={<IconPlus size={16} />} onClick={() => setModal({ editing: null })}>
+            Add automation
+          </Button>
+        </Group>
       }
       padding="md"
     >
@@ -329,10 +347,81 @@ export function AutomationsSection({ table, columns }: { table: string; columns:
           table={table}
           columns={columns}
           editing={modal.editing}
+          draft={modal.draft}
           opened
           onClose={() => setModal(null)}
         />
       )}
+      {describing && (
+        <DescribeAutomation
+          table={table}
+          onClose={() => setDescribing(false)}
+          onDraft={(draft) => {
+            setDescribing(false);
+            setModal({ editing: null, draft });
+          }}
+        />
+      )}
     </Section>
+  );
+}
+
+// "Describe it with AI": the AI drafts an automation from plain words; it
+// opens in the normal window to check and save (nothing runs before that)
+function DescribeAutomation({
+  table,
+  onClose,
+  onDraft,
+}: {
+  table: string;
+  onClose: () => void;
+  onDraft: (draft: { trigger: Trigger; actions: Action[]; from: string }) => void;
+}) {
+  const phone = useMediaQuery("(max-width: 36em)");
+  const [wish, setWish] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const draft = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { data } = await automationWithAi(table, wish);
+      onDraft({ trigger: data.trigger as Trigger, actions: data.actions as Action[], from: wish.trim() });
+    } catch (err) {
+      setError(errorMessage(err, "The AI couldn't draft it"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal opened onClose={onClose} title="Describe the automation" size="lg" fullScreen={phone}>
+      <Stack gap="sm">
+        <Textarea
+          label="What should happen?"
+          description="Say it in your own words, in English or Malayalam. The AI gets only this and the field names, never records."
+          placeholder="e.g. When a leave request is approved, tell the employee and set Approved on to today"
+          autosize
+          minRows={3}
+          maxRows={6}
+          maxLength={500}
+          value={wish}
+          autoFocus
+          onChange={(e) => setWish(e.currentTarget.value)}
+        />
+        {error && (
+          <Text size="sm" c="var(--mantine-color-error)">
+            {error}
+          </Text>
+        )}
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button leftSection={<IconSparkles size={16} />} loading={busy} disabled={wish.trim().length < 3} onClick={draft}>
+            Draft it
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }

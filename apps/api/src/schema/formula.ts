@@ -176,7 +176,11 @@ export function parseFormula(src: string): Node {
     if (t.t === "id") {
       const word = t.v.toLowerCase();
       if (word === "true" || word === "false") return { k: "bool", v: word === "true" };
-      if (!isOp("(")) fail(`Unknown word "${t.v}". Put column names in braces, like {${t.v}}`);
+      if (!isOp("(")) {
+        // an Excel cell (B2, AA10): Zenin has fields, not cells
+        if (/^[A-Za-z]{1,3}\d+$/.test(t.v)) fail(`"${t.v}" looks like an Excel cell. Use field names instead: click a field to insert it`);
+        fail(`Unknown word "${t.v}". Click a field to insert it, or put field names in braces, like {${t.v}}`);
+      }
       pos++;
       const args: Node[] = [];
       if (!isOp(")")) {
@@ -229,6 +233,16 @@ const columnType = (column: Column): FormulaType | null => {
 };
 
 const FUNCTIONS = ["ROUND", "MIN", "MAX", "ABS", "IF", "DAYS", "ADD_DAYS", "CONCAT", "BLANK"];
+// Excel habits, answered in Zenin's terms
+const EXCEL_HINTS: Record<string, string> = {
+  SUM: "No SUM needed: add fields with +, like {subtotal} + {tax}. For a total of linked records, use a Total field",
+  PRODUCT: "No PRODUCT needed: multiply with *, like {qty} * {price}",
+  AVERAGE: "No AVERAGE here: write ({a} + {b}) / 2. For an average of linked records, use a Total field",
+  TODAY: "TODAY() isn't available: a formula is worked out when the record is saved, so it would go stale. Use a date field",
+  NOW: "NOW() isn't available: a formula is worked out when the record is saved, so it would go stale. Use a date field",
+  VLOOKUP: "VLOOKUP isn't available: link the record to the other table instead (a Link field)",
+  XLOOKUP: "XLOOKUP isn't available: link the record to the other table instead (a Link field)",
+};
 const label = (c: Column) => c.label || c.name;
 
 // Compile one formula column. `stack` = formulas being compiled (cycle check).
@@ -314,7 +328,7 @@ function compileNode(node: Node, columns: Column[], stack: string[]): Compiled {
     }
     case "call": {
       const { fn, args } = node;
-      if (!FUNCTIONS.includes(fn)) fail(`Unknown function ${fn}(). Available: ${FUNCTIONS.join(", ")}`);
+      if (!FUNCTIONS.includes(fn)) fail(EXCEL_HINTS[fn] ?? `Unknown function ${fn}(). Available: ${FUNCTIONS.join(", ")}`);
       const count = (min: number, max = min) => {
         if (args.length < min || args.length > max) {
           fail(`${fn}() takes ${min === max ? min : `${min} to ${max === Infinity ? "any number of" : max}`} value${max === 1 ? "" : "s"}`);

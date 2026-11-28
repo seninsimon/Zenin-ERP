@@ -213,6 +213,34 @@ export async function addColumn(tableName: string, input: Record<string, unknown
   return { schema, column: added };
 }
 
+// Turn a column into another kind in place, skipping the usual type rules
+// (a number becomes a formula and back: "Rules found in your data",
+// migration/rules.ts). `afterWrite` sees the new column list, inside the
+// transaction, before formulas are worked out again.
+export async function replaceColumn(
+  tableName: string,
+  columnName: string,
+  make: (current: Column) => Column,
+  afterWrite?: (client: pg.PoolClient, columns: Column[]) => Promise<void>
+) {
+  let before: Column | undefined;
+  let after: Column | undefined;
+  let next: Column[] = [];
+  const schema = await changeColumns(
+    tableName,
+    (columns) => {
+      const index = columns.findIndex((c) => c.name === columnName);
+      if (index === -1) throw new HttpError(404, "That field isn't in the table any more");
+      before = columns[index];
+      after = make(before);
+      next = columns.map((c, i) => (i === index ? after! : c));
+      return next;
+    },
+    afterWrite ? (client) => afterWrite(client, next) : undefined
+  );
+  return { schema, before: before!, after: after! };
+}
+
 // A Text column can have at most this many different values to become a Choice.
 export const MAX_CHOICE_CONVERSION = 50;
 

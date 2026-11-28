@@ -1056,6 +1056,47 @@ automation, approval, default, required, report, none), how to set it up,
 and whether a person must decide ("none" always needs a person). The SQL is
 only read and sent as data, never run; nothing is created from the answer.
 
+**Rules found in the data** (part 4; `rules.ts`, migration 022
+`migrations.rules`): most old systems keep their calculations in program
+code we never get, but the data still shows them. When an import finishes,
+`findRules()` looks for them. **No AI:** nothing leaves the server.
+- **Guess, on a sample** (2,000 records per table, in memory):
+  - number fields: A × B, A + B, A − B, A ÷ B, A × a fixed rate (the median
+    of target ÷ A, rounded to 2–6 decimals), and when nothing simpler fits,
+    three fields (A × B × rate, A + B + C, A × B ± C, A + B − C, A − B − C);
+    `ROUND(…, d)` when it only fits rounded like the field is written;
+  - dates: `ADD_DAYS(A, 30)` or `ADD_DAYS(A, {days field})`, and number =
+    `DAYS(B, A)` (+1);
+  - text: `CONCAT(A, sep, B)`; parts may be single choices;
+  - totals: for each link between the imported tables, `count` and `sum` of
+    each number field of the linked records, run with the roll-up's own SQL.
+
+  Inputs must have at least 3 different values. A guess must hold on 98%
+  of at least 10 records that have all its fields. A field that is just a
+  copy of another gets no rule.
+- **One rule per field, simplest first** (`choose()`: cost order, then the
+  later field), never in a circle. So Amount = Qty × Price wins, and
+  Price = Amount ÷ Qty and Qty = Amount ÷ Price are dropped. Likewise
+  Total = Subtotal + Tax beats Subtotal = Total − Tax.
+- **Proof, on every record:** each chosen rule is compiled by the formula
+  engine (`computedSql()` in `schema/formula.ts`) and compared with the
+  stored values in one query: `checked`, `fits`, `differ`, and `fills`
+  (empty now; the rule would fill it). Below 98% it's dropped. At most 40
+  rules. Measured: about 1 s for 5,000 records and 1.5 s for 50,000 (12 number
+  fields).
+- **Use it** (`GET /migration/:id/rules/:rule` checks again on today's records
+  with up to 10 that would change; `POST …/use`): `replaceColumn()` in
+  `schemaRepo.ts` turns the field into a formula (or roll-up) in place,
+  skipping the usual "can't change to formula" rule. Inside the same
+  transaction, the values it will change (and the empty ones it fills) are
+  kept on the rule (`restore`, at most 5,000, or it's refused), with the
+  column as it was (`original`). Then formulas and totals are worked out
+  again as for any column change. Audit: `update column`.
+- **Change back** (`POST …/undo`): the column as it was (keeping today's
+  label), and the kept values go back. Records that changed since keep
+  today's values. `POST /migration/:id/rules` looks again and keeps the
+  rules in use. The page never gets `restore` or `original`.
+
 ### Changing many records at once (bulk update)
 
 - **On a list:** select rows → **Update** → choose a field → give the value

@@ -1,5 +1,6 @@
 import { query } from "../db/pool.js";
 import type { Plan } from "./analyze.js";
+import type { Rule } from "./rules.js";
 
 // Bring your data: the on/off switch (app_state "migration") and the imports
 // (the `migrations` table, migration 021).
@@ -38,6 +39,7 @@ export type TableProof = {
 };
 export type MigrationResult = { tables: TableProof[]; problems: number; allMatch: boolean };
 
+
 export type Migration = {
   _id: string;
   name: string;
@@ -48,6 +50,8 @@ export type Migration = {
   appKey: string | null;
   createdTables: string[];
   result: MigrationResult | null;
+  // calculations found in the data (part 4); null: not looked for yet
+  rules: Rule[] | null;
   error: string | null;
   problemsKey: string | null;
   jobId: string | null;
@@ -64,6 +68,7 @@ type Row = {
   app_key: string | null;
   created_tables: string[];
   result: MigrationResult | null;
+  rules: Rule[] | null;
   error: string | null;
   problems_key: string | null;
   job_id: string | null;
@@ -80,6 +85,7 @@ const toMigration = (r: Row): Migration => ({
   appKey: r.app_key,
   createdTables: r.created_tables,
   result: r.result,
+  rules: r.rules,
   error: r.error,
   problemsKey: r.problems_key,
   jobId: r.job_id,
@@ -106,7 +112,7 @@ export async function listMigrations() {
 
 export async function updateMigration(
   id: string,
-  patch: Partial<{ plan: Plan; status: MigrationStatus; appKey: string | null; createdTables: string[]; result: MigrationResult | null; error: string | null; problemsKey: string | null; jobId: string | null }>
+  patch: Partial<{ plan: Plan; status: MigrationStatus; appKey: string | null; createdTables: string[]; result: MigrationResult | null; rules: Rule[] | null; error: string | null; problemsKey: string | null; jobId: string | null }>
 ) {
   const sets: string[] = [];
   const params: unknown[] = [id];
@@ -119,6 +125,7 @@ export async function updateMigration(
   if (patch.appKey !== undefined) put("app_key", patch.appKey);
   if (patch.createdTables !== undefined) put("created_tables", patch.createdTables, "::text[]");
   if (patch.result !== undefined) put("result", patch.result === null ? null : JSON.stringify(patch.result), "::jsonb");
+  if (patch.rules !== undefined) put("rules", patch.rules === null ? null : JSON.stringify(patch.rules), "::jsonb");
   if (patch.error !== undefined) put("error", patch.error);
   if (patch.problemsKey !== undefined) put("problems_key", patch.problemsKey);
   if (patch.jobId !== undefined) put("job_id", patch.jobId);

@@ -471,6 +471,13 @@ export async function applyFormulas(schema: TableSchema, ids: string[] | null, c
   }
 }
 
+// The SQL (over a record, alias t) and result type of a formula or roll-up
+// column, for checking a formula against stored values (migration/rules.ts)
+export function computedSql(column: Column, columns: Column[]): { sql: string; type: FormulaType } {
+  const c = column.type === "rollup" ? compileRollup(column) : compileColumn(column, columns);
+  return { sql: c.sql, type: c.type };
+}
+
 // The columns a formula uses (by name), for the "used by" check on delete
 export function formulaRefs(column: Column): string[] {
   const refs: string[] = [];

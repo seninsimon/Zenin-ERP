@@ -398,6 +398,10 @@ Formatting helpers live in `src/lib/format.ts`.
   box: records as links with one line of details and "Open all N →", totals
   as a small table with an "All" row and "Open as a chart →". Never put
   these values into the AI's sentence.
+- **Turning something Zenin found into a setting** ("Use it" on a rule found
+  in imported data): check again first and show, in the window, how much fits
+  and the records that would change (now → becomes), then one named button
+  ("Use this rule"). Say how to undo it. No confirm for the undo itself.
 - **Modal layout:** the title says the task ("Add column"). Buttons sit
   bottom-right: Cancel, then the primary action named for the task ("Add
   column", not "OK"). On phones, modals are full screen.

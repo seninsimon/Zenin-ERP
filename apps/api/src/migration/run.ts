@@ -13,6 +13,7 @@ import { storage } from "../storage.js";
 import type { RecordData } from "../types.js";
 import { importOrder, parseBoolean, parseDate, parseNumber, readFiles, type Plan, type PlanColumn, type PlanTable, type Sheet } from "./analyze.js";
 import { getMigration, updateMigration, type MigrationResult, type TableProof } from "./store.js";
+import { findRules } from "./rules.js";
 
 // Bring your data: the background import of a reviewed plan (job type
 // "migration"). It makes a new app with one table per planned table, imports
@@ -178,7 +179,9 @@ export async function runMigration(job: Job): Promise<{ result: JobResult }> {
       problems: problems.length,
       allMatch: proof.every((p) => p.rowsInFile === p.imported && p.totals.every((x) => x.match)),
     };
-    await updateMigration(id, { status: "done", appKey, createdTables: created, result, problemsKey, error: null });
+    // the old system's calculations, found in the data (part 4); never fails the import
+    const rules = await findRules(created).catch(() => null);
+    await updateMigration(id, { status: "done", appKey, createdTables: created, result, rules, problemsKey, error: null });
     await audit(null, {
       userId: job.userId,
       username: job.username,

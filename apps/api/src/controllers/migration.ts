@@ -11,6 +11,7 @@ import { storage } from "../storage.js";
 import { makePlan, readFiles, restatColumn, slug, type Plan, type PlanType, type SourceFile } from "../migration/analyze.js";
 import { readStoredFiles, removeImported } from "../migration/run.js";
 import { explainLogic } from "../migration/explain.js";
+import { checkRule, findRules, shownRule, undoRule, useRule } from "../migration/rules.js";
 import { featureOn } from "../ai/settings.js";
 import { isAdmin } from "../auth/access.js";
 import {
@@ -23,6 +24,7 @@ import {
   updateMigration,
   type Migration,
 } from "../migration/store.js";
+import type { Rule } from "../migration/rules.js";
 
 // Settings → Bring your data (docs/WORKFLOW.md). Admins only (routes).
 // Off by default; while off, everything but the switch is refused.
@@ -53,6 +55,7 @@ async function shown(m: Migration) {
     createdTables: m.createdTables,
     appKey: m.appKey,
     result: m.result,
+    rules: m.rules?.map(shownRule) ?? null,
     error: m.error,
     hasProblems: Boolean(m.problemsKey),
     progress: job?.progress ?? (m.status === "done" ? 100 : 0),
@@ -222,4 +225,63 @@ export async function deleteHandler(req: Request, res: Response) {
   await deleteMigrationRow(m._id);
   await audit(req, { action: "delete", entity: "app", recordId: `migration:${m._id}`, changes: { tables: { from: m.createdTables } } });
   res.json({ message: m.status === "done" ? "Removed: its tables and records are deleted" : "Removed" });
+}
+
+/* ---------------- rules found in the data (part 4) ---------------- */
+
+async function loadRule(req: Request) {
+  const m = await loadOne(req);
+  if (m.status !== "done") throw new HttpError(409, "Import the data first");
+  const rule = m.rules?.find((r) => r.id === param(req, "rule"));
+  if (!rule) throw new HttpError(404, "Rule not found");
+  return { m, rule };
+}
+const saveRule = (m: Migration, rule: Rule) => updateMigration(m._id, { rules: (m.rules ?? []).map((r) => (r.id === rule.id ? rule : r)) });
+
+// POST /migration/:id/rules: look (again) for calculations in the imported
+// data. Rules already in use stay as they are.
+export async function findRulesHandler(req: Request, res: Response) {
+  const m = await loadOne(req);
+  if (m.status !== "done") throw new HttpError(409, "Import the data first");
+  const used = (m.rules ?? []).filter((r) => r.used);
+  const found = (await findRules(m.createdTables)).filter((r) => !used.some((u) => u.id === r.id));
+  await updateMigration(m._id, { rules: [...used, ...found] });
+  res.json(await shown((await getMigration(m._id))!));
+}
+
+// GET /migration/:id/rules/:rule: checked again on today's records, with
+// some records it would change
+export async function checkRuleHandler(req: Request, res: Response) {
+  const { rule } = await loadRule(req);
+  res.json(await checkRule(rule));
+}
+
+// POST /migration/:id/rules/:rule/use: the field becomes a formula or total
+export async function useRuleHandler(req: Request, res: Response) {
+  const { m, rule } = await loadRule(req);
+  const { rule: used, changed } = await useRule(rule);
+  await saveRule(m, used);
+  await audit(req, {
+    action: "update",
+    entity: "column",
+    tableName: rule.table,
+    recordId: rule.column,
+    changes: { type: { from: rule.type, to: rule.kind === "total" ? "rollup" : "formula" }, rule: { to: rule.says }, recordsUpdated: { to: changed } },
+  });
+  res.json(await shown((await getMigration(m._id))!));
+}
+
+// POST /migration/:id/rules/:rule/undo: Change back
+export async function undoRuleHandler(req: Request, res: Response) {
+  const { m, rule } = await loadRule(req);
+  const back = await undoRule(rule);
+  await saveRule(m, back);
+  await audit(req, {
+    action: "update",
+    entity: "column",
+    tableName: rule.table,
+    recordId: rule.column,
+    changes: { type: { from: rule.kind === "total" ? "rollup" : "formula", to: rule.type }, rule: { from: rule.says }, recordsUpdated: { to: Object.keys(rule.restore ?? {}).length } },
+  });
+  res.json(await shown((await getMigration(m._id))!));
 }

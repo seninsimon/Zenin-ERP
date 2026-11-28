@@ -10,6 +10,7 @@ import {
   FileInput,
   Group,
   Loader,
+  Modal,
   Paper,
   Progress,
   Select,
@@ -20,14 +21,15 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconAlertTriangle, IconCircleCheck, IconDownload, IconFileImport, IconInfoCircle, IconLink, IconTrash } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCircleCheck, IconDownload, IconFileImport, IconInfoCircle, IconLink, IconMathFunction, IconTrash } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMediaQuery } from "@mantine/hooks";
 import { Link, useSearchParams } from "react-router-dom";
 
 import api, { errorMessage } from "../../api/api";
 import { confirmDanger } from "../../components/ui/confirm";
 import { Page, PageHeader, Section } from "../../components/ui/Page";
-import { tablePath, tableTitle } from "../../layout/nav";
+import { recordPath, tablePath, tableTitle } from "../../layout/nav";
 import { formatDateTime, formatNumber, pluralize } from "../../lib/format";
 
 // Settings → Bring your data (docs/WORKFLOW.md): move data from Excel or
@@ -49,6 +51,26 @@ type Logic = {
   needsPerson: boolean;
   explained: boolean;
 };
+// a calculation found in the imported data (part 4)
+type Rule = {
+  id: string;
+  table: string;
+  column: string;
+  kind: "formula" | "total";
+  expression?: string;
+  says: string;
+  hint?: string;
+  checked: number;
+  fits: number;
+  differ: number;
+  fills: number;
+  used: boolean;
+  changed: number;
+};
+type RuleCheck = {
+  proof: { checked: number; fits: number; differ: number; fills: number } | null;
+  examples: { id: string; title: string | null; now: string | null; becomes: string | null }[];
+};
 type Proof = { table: string; source: string; rowsInFile: number; imported: number; totals: { label: string; file: number; zenin: number; match: boolean }[]; problems: number };
 type Migration = {
   _id: string;
@@ -58,6 +80,7 @@ type Migration = {
   plan: { tables: PlanTable[]; logic?: Logic[] };
   createdTables: string[];
   result: { tables: Proof[]; problems: number; allMatch: boolean } | null;
+  rules: Rule[] | null;
   error: string | null;
   hasProblems: boolean;
   progress: number;
@@ -341,6 +364,203 @@ function LogicReport({ m, aiReady, onChanged }: { m: Migration; aiReady: boolean
   );
 }
 
+/* ---------------- rules found in the data (part 4) ---------------- */
+
+const shownValue = (v: string | null) => (v === null || v === "" ? "empty" : /^-?\d+(\.\d+)?$/.test(v) ? formatNumber(Number(v)) : v);
+const fieldOf = (r: Rule) => r.says.split(" = ")[0];
+
+// "Use it": checked again on today's records, with what would change
+function UseRule({ m, rule, onClose, onChanged }: { m: Migration; rule: Rule; onClose: () => void; onChanged: (m: Migration) => void }) {
+  const [busy, setBusy] = useState(false);
+  const phone = useMediaQuery("(max-width: 36em)");
+  const check = useQuery({
+    queryKey: ["migration-rule", m._id, rule.id],
+    queryFn: async () => (await api.get<RuleCheck>(`/migration/${m._id}/rules/${encodeURIComponent(rule.id)}`)).data,
+    gcTime: 0,
+  });
+  const p = check.data?.proof;
+  const use = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post<Migration>(`/migration/${m._id}/rules/${encodeURIComponent(rule.id)}/use`);
+      onChanged(data);
+      notifications.show({ message: `${fieldOf(rule)} is worked out by Zenin now`, color: "green" });
+      onClose();
+    } catch (err) {
+      notifications.show({ title: "Couldn't use it", message: errorMessage(err), color: "red" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal opened onClose={onClose} title="Use this rule" size="lg" fullScreen={phone}>
+      <Stack gap="sm">
+        <Text fw={600}>{rule.says}</Text>
+        <Text size="sm">
+          {fieldOf(rule)} in {tableTitle(rule.table)} becomes {rule.kind === "total" ? "a total over the linked records" : "a formula"}. Zenin works it out on
+          every record, also new ones, and nobody types it any more.
+        </Text>
+        {check.isLoading && <Loader size="sm" />}
+        {check.error && <Alert color="red">{errorMessage(check.error)}</Alert>}
+        {p && (
+          <>
+            <Text size="sm">
+              Checked on today's records: it fits {formatNumber(p.fits)} of {formatNumber(p.checked)}.
+              {p.fills ? ` ${pluralize(p.fills, "empty one")} will be filled.` : ""}
+            </Text>
+            {p.differ > 0 && (
+              <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title={`${pluralize(p.differ, "record")} will change`} styles={{ body: { minWidth: 0 } }}>
+                <Text size="sm" mb={6}>
+                  Their value now isn't what the rule gives (typed by hand, or a mistake). They get the rule's value.
+                </Text>
+                <Box style={{ overflowX: "auto" }}>
+                  <Table fz="sm" verticalSpacing={4}>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th scope="col">Record</Table.Th>
+                        <Table.Th scope="col" ta="right">Now</Table.Th>
+                        <Table.Th scope="col" ta="right">Becomes</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {check.data!.examples.map((e) => (
+                        <Table.Tr key={e.id}>
+                          <Table.Td>
+                            <Anchor component={Link} to={recordPath(rule.table, e.id)} size="sm" target="_blank">
+                              {e.title || "Open"}
+                            </Anchor>
+                          </Table.Td>
+                          <Table.Td ta="right" className="tabular-nums">{shownValue(e.now)}</Table.Td>
+                          <Table.Td ta="right" className="tabular-nums">{shownValue(e.becomes)}</Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Box>
+                {p.differ > check.data!.examples.length && (
+                  <Text size="xs" c="dimmed" mt={4}>
+                    and {pluralize(p.differ - check.data!.examples.length, "more")}
+                  </Text>
+                )}
+              </Alert>
+            )}
+            <Text size="xs" c="dimmed">
+              Not right? <b>Change back</b> makes it a normal field again, and puts back the values the rule changed.
+            </Text>
+          </>
+        )}
+        <Group justify="flex-end" gap="sm" mt="xs">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={use} loading={busy} disabled={!p}>
+            Use this rule
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+// Calculations the old system did (Amount = Qty × Price), found by checking
+// every record. Zenin finds them itself: nothing goes to the AI.
+function RulesReport({ m, onChanged }: { m: Migration; onChanged: (m: Migration) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [using, setUsing] = useState<Rule | null>(null);
+  const rules = m.rules;
+  const run = async (key: string, path: string, done?: string) => {
+    setBusy(key);
+    try {
+      const { data } = await api.post<Migration>(`/migration/${m._id}${path}`);
+      onChanged(data);
+      if (done) notifications.show({ message: done, color: "green" });
+    } catch (err) {
+      notifications.show({ title: "That didn't work", message: errorMessage(err), color: "red" });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const inUse = rules?.filter((r) => r.used).length ?? 0;
+  return (
+    <Paper withBorder radius="md" p="md">
+      <Group justify="space-between" gap="sm" mb="xs" wrap="nowrap" align="flex-start">
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Text fw={600} size="sm">
+            Rules found in your data{rules?.length ? `: ${rules.length}` : ""}
+          </Text>
+          <Text size="xs" c="dimmed">
+            Calculations the old system did, found by checking every record. Use one and Zenin works it out from now on.
+            Zenin finds them itself: nothing is sent to the AI.
+            {inUse ? ` ${inUse} in use.` : ""}
+          </Text>
+        </Box>
+        {rules !== null && (
+          <Button size="xs" variant="subtle" loading={busy === "look"} onClick={() => run("look", "/rules")}>
+            Look again
+          </Button>
+        )}
+      </Group>
+      {rules === null ? (
+        <Button size="xs" variant="light" leftSection={<IconMathFunction size={14} />} loading={busy === "look"} onClick={() => run("look", "/rules")}>
+          Look for rules
+        </Button>
+      ) : !rules.length ? (
+        <Text size="sm" c="dimmed">
+          No calculations found: every field looks typed in by people. Totals, rates and dates that follow a rule would show here.
+        </Text>
+      ) : (
+        <Stack gap={0}>
+          {rules.map((r) => (
+            <Group key={r.id} gap="sm" py={8} wrap="nowrap" align="flex-start" style={{ borderTop: "1px solid var(--app-border)" }}>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Group gap="xs" wrap="wrap">
+                  <Badge size="sm" variant="default">
+                    {tableTitle(r.table)}
+                  </Badge>
+                  <Text size="sm" fw={500} style={{ wordBreak: "break-word" }}>
+                    {r.says}
+                  </Text>
+                </Group>
+                <Text size="xs" c="dimmed" mt={2}>
+                  {[
+                    r.hint,
+                    r.used
+                      ? `In use${r.changed ? `: changed ${pluralize(r.changed, "record")}` : ""}`
+                      : `Fits ${formatNumber(r.fits)} of ${formatNumber(r.checked)} records${r.differ ? `; ${formatNumber(r.differ)} differ` : ""}${r.fills ? `; fills ${formatNumber(r.fills)} empty` : ""}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Text>
+              </Box>
+              {r.used ? (
+                <Group gap={6} wrap="nowrap">
+                  <Badge size="sm" color="teal" variant="light">
+                    In use
+                  </Badge>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="gray"
+                    loading={busy === r.id}
+                    onClick={() => run(r.id, `/rules/${encodeURIComponent(r.id)}/undo`, `${fieldOf(r)} is a normal field again`)}
+                  >
+                    Change back
+                  </Button>
+                </Group>
+              ) : (
+                <Button size="xs" variant="light" onClick={() => setUsing(r)}>
+                  Use it
+                </Button>
+              )}
+            </Group>
+          ))}
+        </Stack>
+      )}
+      {using && <UseRule m={m} rule={using} onClose={() => setUsing(null)} onChanged={onChanged} />}
+    </Paper>
+  );
+}
+
 /* ---------------- result ---------------- */
 
 function Result({ m, onRemoved }: { m: Migration; onRemoved: () => void }) {
@@ -561,6 +781,7 @@ export default function MigrationPage() {
                     open(null);
                   }}
                 />
+                <RulesReport m={m} onChanged={(next) => qc.setQueryData(["migration", next._id], next)} />
                 <LogicReport m={m} aiReady={Boolean(list.data?.aiReady)} onChanged={(next) => qc.setQueryData(["migration", next._id], next)} />
                 </Stack>
               ) : (
